@@ -1,6 +1,8 @@
 const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const { execSync } = require('child_process');
 
 // 🌟 账号密码硬编码
 const MC_USERNAME = 'peng320829@gmail.com';
@@ -23,7 +25,6 @@ async function sendTelegramMessage(text) {
     }
 }
 
-// 终极版验证码克星：加入自动寻路与强制语音模式
 async function autoSolveCaptcha(page) {
     try {
         const challengeFrame = page.frameLocator('iframe[src*="api2/bframe"]').first();
@@ -39,11 +40,10 @@ async function autoSolveCaptcha(page) {
                 const audioBtn = challengeFrame.locator('#recaptcha-audio-button');
                 if (await audioBtn.isVisible({ timeout: 2000 })) {
                     await audioBtn.click({ force: true });
-                    await page.waitForTimeout(1500); // 等待语音面板滑出
+                    await page.waitForTimeout(1500); 
                 }
             }
 
-            // 再次检查小黄人图标
             if (await solverBtn.isVisible({ timeout: 3000 })) {
                 console.log("  [侦测] 🤖 成功锁定 Buster 小黄人图标！正在点击破解...");
                 await solverBtn.click({ force: true });
@@ -52,7 +52,7 @@ async function autoSolveCaptcha(page) {
                 console.log("  [侦测] ✅ Buster 破解动作执行完毕。");
                 return true;
             } else {
-                console.log("  [侦测] 🚨 致命异常：已经切入语音模式，但 Buster 插件仍未加载！可能是路径错误或被拦截。");
+                console.log("  [侦测] 🚨 致命异常：已经切入语音模式，但 Buster 插件仍未加载！(可能被拦截)");
             }
         }
     } catch (e) {}
@@ -61,20 +61,26 @@ async function autoSolveCaptcha(page) {
 
 (async () => {
     console.log("==========================================");
-    console.log("🚀 [步骤 0] 脚本启动，执行环境自检...");
+    console.log("🚀 [步骤 0] 脚本启动，执行环境自检与自动修复...");
     
-    // 🌟 核心修复：自动雷达扫描 Buster 插件的真实路径
-    let busterPath = path.join(__dirname, 'extensions', 'buster', 'unpacked');
+    // =====================================
+    // 🌟 核心升级：全自动下载配置 Buster 插件
+    // =====================================
+    const busterPath = path.join(os.tmpdir(), 'buster-extension');
     if (!fs.existsSync(busterPath)) {
-        busterPath = path.join(__dirname, 'extensions', 'buster');
-        if (!fs.existsSync(busterPath)) {
-            busterPath = path.join(__dirname, 'buster'); // 兜底查找
+        console.log("📥 [环境修复] 未检测到 Buster 插件，正在全自动下载官方版本...");
+        try {
+            fs.mkdirSync(busterPath, { recursive: true });
+            execSync('wget -qO /tmp/buster.zip https://github.com/dessant/buster/releases/download/v2.0.1/buster-extension-2.0.1-chrome.zip');
+            execSync(`unzip -o -q /tmp/buster.zip -d ${busterPath}`);
+            console.log(`✅ [环境修复] Buster 插件下载并解压成功: ${busterPath}`);
+        } catch (e) {
+            console.error("🚨 [环境修复致命错误] 下载或解压 Buster 失败！", e.message);
         }
+    } else {
+        console.log(`✅ [环境检查] 找到本地已存在的 Buster 插件: ${busterPath}`);
     }
-    console.log(`📂 [环境检查] 动态锁定的 Buster 插件路径: ${busterPath}`);
-    if (!fs.existsSync(busterPath)) {
-         console.log("🚨 [致命警告] 无法在当前目录找到 Buster 插件！接下来的验证码将无法破解！");
-    }
+    // =====================================
 
     let context;
     let targetPage;
@@ -89,7 +95,7 @@ async function autoSolveCaptcha(page) {
                 '--headless=new', 
                 `--disable-extensions-except=${busterPath}`,
                 `--load-extension=${busterPath}`,
-                '--disable-web-security', // 🌟 关键：干掉网页的安全策略拦截，让插件畅通无阻
+                '--disable-web-security', 
                 '--disable-site-isolation-trials',
                 '--disable-features=IsolateOrigins,site-per-process',
                 '--no-sandbox',
@@ -138,7 +144,7 @@ async function autoSolveCaptcha(page) {
                     const solved = await autoSolveCaptcha(targetPage);
                     
                     if (solved) {
-                        await targetPage.waitForTimeout(3000); // 破解完等一会儿让动画转圈结束
+                        await targetPage.waitForTimeout(3000); 
                         try {
                             if (await loginBtn.isVisible({ timeout: 1000 })) {
                                 await loginBtn.click({ force: true });
@@ -149,7 +155,6 @@ async function autoSolveCaptcha(page) {
                     await targetPage.waitForTimeout(2000);
                 }
                 
-                // 🛑 核心防线：如果 30 秒了还没进去（大概率是被验证码卡死），直接报错退出，不往后走！
                 if (!loginSuccess) {
                      throw new Error("🚨 登录被拦截！30秒内未能成功进入后台，可能是验证码破解失败或账号密码错误！");
                 }
