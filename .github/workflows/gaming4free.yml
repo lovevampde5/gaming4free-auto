@@ -59,6 +59,7 @@ jobs:
         run: |
           npm init -y
           npm install playwright
+          npm install playwright-extra puppeteer-extra-plugin-stealth # 🌟 新增这行！
           npx playwright install chromium --with-deps
 
       - name: Download and Unzip Buster
