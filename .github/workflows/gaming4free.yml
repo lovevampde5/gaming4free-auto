@@ -3,7 +3,14 @@ name: gaming4free renew (WARP + Buster)
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */12 * * *"   # 设置为每 12 小时自动跑一次
+    - cron: "0 */12 * * *"
+
+# ========================
+# 补上这部分权限声明！
+permissions:
+  actions: write   # 允许工作流清理旧的运行日志
+  contents: read   # 允许拉取代码
+# ========================
 
 jobs:
   run:
