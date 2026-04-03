@@ -69,9 +69,18 @@ async function autoSolveCaptcha(page) {
         targetPage = page;
         console.log("✅ [步骤 2] 标签页创建成功！");
 
-        console.log("🌐 [步骤 3] 正在访问前台登录页...");
-        await targetPage.goto('https://gaming4free.net/login', { waitUntil: 'networkidle', timeout: 60000 });
+        // 🌟 路线变更 1：直接访问特定的游戏落地页
+        console.log("🌐 [步骤 3] 正在访问新起点网页 (free-hytale-hosting)...");
+        await targetPage.goto('https://gaming4free.net/free-hytale-hosting', { waitUntil: 'networkidle', timeout: 60000 });
         console.log("✅ [步骤 3] 页面加载完成。");
+
+        // 🌟 路线变更 2：寻找并点击右上角的 Login 按钮
+        console.log("🖱️ [步骤 3.5] 正在寻找并点击网页右上角的 Login 按钮...");
+        const topLoginBtn = targetPage.locator('a, button').filter({ hasText: /^Login$/i }).first();
+        await topLoginBtn.waitFor({ state: 'visible', timeout: 15000 });
+        await topLoginBtn.click({ force: true });
+        console.log("✅ [步骤 3.5] 已点击 Login，等待登录表单出现...");
+        await targetPage.waitForLoadState('networkidle');
 
         console.log("🔑 [步骤 4] 正在输入前台账号密码...");
         await targetPage.locator('input[type="email"]').filter({ state: 'visible' }).first().fill(MC_USERNAME);
@@ -95,85 +104,87 @@ async function autoSolveCaptcha(page) {
             console.log("✅ [步骤 5] 无新手引导弹窗。");
         }
 
-        console.log("🎛️ [步骤 6] 寻找并点击 Panel 按钮进入后台...");
+        // 🌟 路线变更 3：不再点击抽象的 Panel 按钮，而是直接点击包含 'My renqi' 的服务器卡片
+        console.log("🎛️ [步骤 6] 正在 Dashboard 中寻找你的专属服务器区块 (My renqi)...");
         const panelPromise = context.waitForEvent('page').catch(() => null);
-        await targetPage.locator('a[target="_blank"]').last().click({ force: true });
+        
+        const myServerCard = targetPage.getByText('My renqi', { exact: false }).first();
+        await myServerCard.waitFor({ state: 'visible', timeout: 15000 });
+        await myServerCard.click({ force: true });
         
         const newPage = await panelPromise;
         if (newPage) {
             targetPage = newPage;
             await targetPage.waitForLoadState('networkidle');
-            console.log("✅ [步骤 6] 已成功切换至后台新标签页。");
+            console.log("✅ [步骤 6] 已点击专属服务器，并成功切换至新标签页。");
+        } else {
+            console.log("✅ [步骤 6] 已点击专属服务器，在当前页面发生跳转。");
         }
 
-        // =====================================
-        // 🌟 本次修复核心：中转页广告与导航处理
-        // =====================================
-        console.log("🛡️ [步骤 6.5] 检查是否遭遇 Serverwave 赞助商中转页...");
-        await targetPage.waitForTimeout(3000); // 稍微等广告弹出来
-        
-        // 暴力按 ESC 尝试关掉可能遮挡视线的弹窗
+        console.log("🛡️ [步骤 6.5] 巡检防御：检查是否遭遇 Serverwave 赞助商中转页...");
+        await targetPage.waitForTimeout(3000); 
         await targetPage.keyboard.press('Escape').catch(() => {});
         await targetPage.waitForTimeout(500);
 
         try {
-            // 尝试点击广告右上角的关闭按钮 (X)
             const closeAdBtn = targetPage.locator('.close, svg.lucide-x, button:has(svg.lucide-x)').first();
             if (await closeAdBtn.isVisible({ timeout: 1000 })) {
                 await closeAdBtn.click({ force: true });
-                console.log("💥 [步骤 6.5] 已强行关闭中心广告弹窗！");
+                console.log("💥 [步骤 6.5] 已强行关闭中转页广告弹窗！");
             }
         } catch (e) {}
 
         try {
-            // 寻找导航栏里的 LOG IN 按钮并点击
             const topNavLoginBtn = targetPage.locator('a, button').filter({ hasText: /^LOG IN$/i }).first();
             if (await topNavLoginBtn.isVisible({ timeout: 3000 })) {
                 console.log("🔗 [步骤 6.5] 发现中转页！正在点击右上角 LOG IN 前往真正的面板...");
                 await topNavLoginBtn.click({ force: true });
                 await targetPage.waitForLoadState('networkidle');
+            }
+        } catch (e) {}
+
+        console.log("🔒 [步骤 7] 巡检防御：检查是否需要执行后台二次登录...");
+        try {
+            const emailInput = targetPage.locator('input[name="user"], input[name="username"], input[type="email"], input[type="text"]').filter({ state: 'visible' }).first();
+            if (await emailInput.isVisible({ timeout: 5000 })) {
+                await emailInput.fill(MC_USERNAME);
+                const pwdInput = targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first();
+                await pwdInput.fill(MC_PASSWORD);
+
+                const loginBtnBackend = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
+                await loginBtnBackend.click({ force: true });
+                console.log("✅ [步骤 7] 后台账号密码已提交！");
+
+                console.log("🤖 [步骤 8] 检查后台登录时是否弹出验证码...");
+                const solvedAtLogin = await autoSolveCaptcha(targetPage);
+                if (solvedAtLogin) {
+                    try {
+                        const loginBtnRetry = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
+                        if (await loginBtnRetry.isVisible({ timeout: 2000 })) {
+                            await loginBtnRetry.click({ force: true });
+                            console.log("✅ [步骤 8] 破解后已补点登录按钮。");
+                        }
+                    } catch(e) {}
+                }
             } else {
-                console.log("✅ [步骤 6.5] 未检测到中转页导航，可能已直达面板。");
+                console.log("✅ [步骤 7] 未检测到登录表单，看来我们已经直接在面板内了！");
             }
         } catch (e) {
-            console.log("✅ [步骤 6.5] 未检测到中转页导航，可能已直达面板。");
-        }
-        // =====================================
-
-        console.log("🔒 [步骤 7] 执行后台二次登录 (已开启防陷阱识别)...");
-        const emailInput = targetPage.locator('input[name="user"], input[name="username"], input[type="email"], input[type="text"]').filter({ state: 'visible' }).first();
-        await emailInput.waitFor({ state: 'visible', timeout: 15000 });
-        await emailInput.fill(MC_USERNAME);
-
-        const pwdInput = targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first();
-        await pwdInput.fill(MC_PASSWORD);
-
-        const loginBtnBackend = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
-        await loginBtnBackend.click({ force: true });
-        console.log("✅ [步骤 7] 账号密码已提交！");
-
-        console.log("🤖 [步骤 8] 检查后台登录时是否弹出验证码...");
-        const solvedAtLogin = await autoSolveCaptcha(targetPage);
-        if (solvedAtLogin) {
-            try {
-                const loginBtnRetry = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
-                if (await loginBtnRetry.isVisible({ timeout: 2000 })) {
-                    await loginBtnRetry.click({ force: true });
-                    console.log("✅ [步骤 8] 破解后已补点登录按钮。");
-                }
-            } catch(e) {}
+            console.log("✅ [步骤 7] 未检测到登录表单，免密通行。");
         }
 
-        console.log("🖥️ [步骤 9] 寻找你的服务器区块...");
-        await targetPage.waitForLoadState('networkidle');
-        await targetPage.waitForTimeout(3000);
-        
-        const serverBlock = targetPage.getByText('My renqi', { exact: false }).first();
-        await serverBlock.waitFor({ state: 'visible', timeout: 15000 });
-        await serverBlock.click({ force: true });
-        console.log("✅ [步骤 9] 已点击服务器区块。");
-        
-        await targetPage.waitForLoadState('networkidle');
+        console.log("🖥️ [步骤 9] 巡检防御：检查是否身处服务器列表页...");
+        try {
+            // 如果上一步跳转到了 Server List 而不是直接进入服务器，这里再点一次 My renqi
+            const backendServerBlock = targetPage.locator('div, a').filter({ hasText: /My renqi/i }).first();
+            if (await backendServerBlock.isVisible({ timeout: 5000 })) {
+                await backendServerBlock.click({ force: true });
+                await targetPage.waitForLoadState('networkidle');
+                console.log("✅ [步骤 9] 已从服务器列表进入专属服务器。");
+            }
+        } catch (e) {
+            console.log("✅ [步骤 9] 当前已在服务器详情页内。");
+        }
 
         console.log("💻 [步骤 10] 进入 Console 面板...");
         await targetPage.getByText('Console', { exact: true }).click();
