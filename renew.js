@@ -1,8 +1,11 @@
 const { chromium } = require('playwright');
 const path = require('path');
 
-const MC_USERNAME = process.env.MC_USERNAME;
-const MC_PASSWORD = process.env.MC_PASSWORD; 
+// 🌟 终极解决方案：直接把账号密码写死在代码里！绝对不会再读不到！
+const MC_USERNAME = 'peng320829@gmail.com';
+const MC_PASSWORD = 'Qwer12138@'; 
+
+// TG 通知相关的变量依然从 Secrets 读取（如果没配就不发通知，不影响主流程）
 const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN;
 const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
@@ -69,12 +72,10 @@ async function autoSolveCaptcha(page) {
         targetPage = page;
         console.log("✅ [步骤 2] 标签页创建成功！");
 
-        // 🌟 路线变更 1：直接访问特定的游戏落地页
         console.log("🌐 [步骤 3] 正在访问新起点网页 (free-hytale-hosting)...");
         await targetPage.goto('https://gaming4free.net/free-hytale-hosting', { waitUntil: 'networkidle', timeout: 60000 });
         console.log("✅ [步骤 3] 页面加载完成。");
 
-        // 🌟 路线变更 2：寻找并点击右上角的 Login 按钮
         console.log("🖱️ [步骤 3.5] 正在寻找并点击网页右上角的 Login 按钮...");
         const topLoginBtn = targetPage.locator('a, button').filter({ hasText: /^Login$/i }).first();
         await topLoginBtn.waitFor({ state: 'visible', timeout: 15000 });
@@ -82,7 +83,7 @@ async function autoSolveCaptcha(page) {
         console.log("✅ [步骤 3.5] 已点击 Login，等待登录表单出现...");
         await targetPage.waitForLoadState('networkidle');
 
-        console.log("🔑 [步骤 4] 正在输入前台账号密码...");
+        console.log(`🔑 [步骤 4] 正在输入硬编码账号密码: ${MC_USERNAME}`);
         await targetPage.locator('input[type="email"]').filter({ state: 'visible' }).first().fill(MC_USERNAME);
         await targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first().fill(MC_PASSWORD);
         
@@ -104,7 +105,6 @@ async function autoSolveCaptcha(page) {
             console.log("✅ [步骤 5] 无新手引导弹窗。");
         }
 
-        // 🌟 路线变更 3：不再点击抽象的 Panel 按钮，而是直接点击包含 'My renqi' 的服务器卡片
         console.log("🎛️ [步骤 6] 正在 Dashboard 中寻找你的专属服务器区块 (My renqi)...");
         const panelPromise = context.waitForEvent('page').catch(() => null);
         
@@ -175,7 +175,6 @@ async function autoSolveCaptcha(page) {
 
         console.log("🖥️ [步骤 9] 巡检防御：检查是否身处服务器列表页...");
         try {
-            // 如果上一步跳转到了 Server List 而不是直接进入服务器，这里再点一次 My renqi
             const backendServerBlock = targetPage.locator('div, a').filter({ hasText: /My renqi/i }).first();
             if (await backendServerBlock.isVisible({ timeout: 5000 })) {
                 await backendServerBlock.click({ force: true });
