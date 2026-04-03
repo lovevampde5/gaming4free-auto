@@ -85,7 +85,7 @@ jobs:
         if: always()
         with:
           name: screenshots
-          path: scripts/screenshots/**
+          path: screenshots/** # ⚠️ 注意这里！把前面的 scripts/ 删掉！
           retention-days: 1
           if-no-files-found: warn
 
