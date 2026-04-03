@@ -53,24 +53,27 @@ async function sendTelegramMessage(text) {
         await targetPage.waitForLoadState('networkidle');
 
         // ==========================================
-        // 🌟 新增逻辑：处理随机出现的 Welcome 弹窗
+        // 🌟 优化逻辑：处理随机出现的 Welcome 弹窗
         // ==========================================
         console.log("🔍 检查是否有新手引导弹窗...");
         try {
-            // 给它 5 秒钟时间找 Skip 按钮，找到了就点，找不到就进入 catch 分支忽略它
-            const skipBtn = targetPage.getByRole('button', { name: 'Skip', exact: true });
-            await skipBtn.click({ timeout: 5000 });
+            // 放宽限制：只要是内容包含 Skip 的元素就尝试点击
+            const skipBtn = targetPage.getByText('Skip', { exact: true });
+            await skipBtn.waitFor({ state: 'visible', timeout: 5000 });
+            await skipBtn.click();
             console.log("👀 发现新手引导，已点击 Skip 跳过。");
-            await targetPage.waitForTimeout(1000); // 稍微等 1 秒让弹窗动画消失
+            await targetPage.waitForTimeout(1000); 
         } catch (error) {
-            console.log("✅ 没有新手引导弹窗，继续执行。");
+            console.log("✅ 5秒内未检测到弹窗，或已被安全忽略，继续执行。");
         }
         // ==========================================
 
         // 2. 点击 Panel (外部跳转图标)
         console.log("🎛️ 准备进入服务器后台 Panel...");
         const panelPromise = context.waitForEvent('page').catch(() => null);
-        await targetPage.locator('a[target="_blank"]').last().click();
+        
+        // 🌟 终极防弹衣：添加 { force: true }，无视任何弹窗强行点击！
+        await targetPage.locator('a[target="_blank"]').last().click({ force: true });
         
         const newPage = await panelPromise;
         if (newPage) {
@@ -87,7 +90,8 @@ async function sendTelegramMessage(text) {
         console.log("⏳ 正在寻找并点击 ADD 90 MINUTES...");
         const addTimeBtn = targetPage.getByRole('button', { name: /ADD 90 MINUTES/i });
         await addTimeBtn.waitFor({ state: 'visible', timeout: 15000 });
-        await addTimeBtn.click();
+        // 在这里也加上 force，防止里面也有什么奇奇怪怪的悬浮窗挡着
+        await addTimeBtn.click({ force: true });
 
         // 5. 等待广告读秒结束
         console.log("📺 广告时间... 正在等待状态变更为 PLEASE WAIT...");
