@@ -1,11 +1,10 @@
 const { chromium } = require('playwright');
 const path = require('path');
 
-// 🌟 终极解决方案：直接把账号密码写死在代码里！绝对不会再读不到！
+// 🌟 账号密码已硬编码
 const MC_USERNAME = 'peng320829@gmail.com';
 const MC_PASSWORD = 'Qwer12138@'; 
 
-// TG 通知相关的变量依然从 Secrets 读取（如果没配就不发通知，不影响主流程）
 const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN;
 const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
@@ -83,16 +82,34 @@ async function autoSolveCaptcha(page) {
         console.log("✅ [步骤 3.5] 已点击 Login，等待登录表单出现...");
         await targetPage.waitForLoadState('networkidle');
 
+        // =====================================
+        // 🌟 本次修复核心：防吞字的拟人输入法
+        // =====================================
         console.log(`🔑 [步骤 4] 正在输入硬编码账号密码: ${MC_USERNAME}`);
-        await targetPage.locator('input[type="email"]').filter({ state: 'visible' }).first().fill(MC_USERNAME);
-        await targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first().fill(MC_PASSWORD);
         
+        // 1. 精准瞄准 placeholder 为 you@example.com 的框
+        const emailField = targetPage.locator('input[placeholder="you@example.com"], input[name="email"], input[type="email"]').filter({ state: 'visible' }).first();
+        await emailField.waitFor({ state: 'visible', timeout: 10000 });
+        await emailField.click(); // 拟人动作：先点进去聚焦
+        await targetPage.waitForTimeout(500); // 停顿 0.5 秒让前端框架反应
+        await emailField.fill(MC_USERNAME);
+
+        // 2. 同样小心地输入密码
+        const pwdField = targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first();
+        await pwdField.click();
+        await targetPage.waitForTimeout(500);
+        await pwdField.fill(MC_PASSWORD);
+        
+        // 3. 点击登录并强制核验是否跳转
         const loginBtn = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
         await loginBtn.click({ force: true });
         console.log("⏳ [步骤 4] 账号密码已提交！等待跳转 Dashboard...");
         
-        await targetPage.waitForURL('**/dashboard**', { timeout: 30000 }).catch(() => {});
+        // 这里增加验证，如果没跳转直接抛出错误，不要瞎往后走
+        await targetPage.waitForURL('**/dashboard**', { timeout: 20000 });
         await targetPage.waitForLoadState('networkidle');
+        console.log("✅ [步骤 4] 成功进入 Dashboard！");
+        // =====================================
 
         console.log("🔍 [步骤 5] 检查前台新手引导弹窗...");
         try {
@@ -145,11 +162,16 @@ async function autoSolveCaptcha(page) {
 
         console.log("🔒 [步骤 7] 巡检防御：检查是否需要执行后台二次登录...");
         try {
-            const emailInput = targetPage.locator('input[name="user"], input[name="username"], input[type="email"], input[type="text"]').filter({ state: 'visible' }).first();
-            if (await emailInput.isVisible({ timeout: 5000 })) {
-                await emailInput.fill(MC_USERNAME);
-                const pwdInput = targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first();
-                await pwdInput.fill(MC_PASSWORD);
+            const emailInputBackend = targetPage.locator('input[name="user"], input[name="username"], input[type="email"], input[type="text"]').filter({ state: 'visible' }).first();
+            if (await emailInputBackend.isVisible({ timeout: 5000 })) {
+                await emailInputBackend.click();
+                await targetPage.waitForTimeout(500);
+                await emailInputBackend.fill(MC_USERNAME);
+                
+                const pwdInputBackend = targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first();
+                await pwdInputBackend.click();
+                await targetPage.waitForTimeout(500);
+                await pwdInputBackend.fill(MC_PASSWORD);
 
                 const loginBtnBackend = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
                 await loginBtnBackend.click({ force: true });
