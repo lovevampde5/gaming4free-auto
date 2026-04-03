@@ -46,22 +46,24 @@ async function autoSolveCaptcha(page) {
     let targetPage;
 
     try {
-        console.log("🔥 [步骤 1] 正在点火启动浏览器 (使用黄金参数组合)...");
+        console.log("🔥 [步骤 1] 正在点火启动浏览器 (启用新一代 --headless=new 原生模式)...");
         
         context = await chromium.launchPersistentContext('', {
-            headless: false,
+            // 这里必须设为 false 骗过 Playwright 的老旧判定
+            headless: false, 
             timeout: 120000, 
             args: [
+                '--headless=new', // 🌟 终极魔法：让 Chrome 自动处理无头模式，完美兼容插件且不卡死！
                 `--disable-extensions-except=${busterPath}`,
                 `--load-extension=${busterPath}`,
-                '--disable-gpu',             // 🌟 必须：防止 GPU 进程崩溃 (修复刚才的错误)
-                '--no-sandbox',              // 🌟 必须：Linux 运行权限
-                '--disable-setuid-sandbox',  // 🌟 必须：Linux 运行权限
-                '--disable-dev-shm-usage',   // 🌟 必须：防止 Docker 环境下内存溢出
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu' // 在新无头模式下，禁用 GPU 是非常安全的
             ],
             ignoreDefaultArgs: ["--mute-audio"],
         });
-        console.log("✅ [步骤 1] 浏览器进程拉起成功！");
+        console.log("✅ [步骤 1] 浏览器进程拉起成功！死锁已解除！");
 
         console.log("📄 [步骤 2] 正在创建新标签页...");
         const page = await context.newPage();
