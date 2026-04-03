@@ -25,12 +25,11 @@ async function sendTelegramMessage(text) {
     }
 }
 
-// 🌟 终极验证码克星：直接瞄准按钮，放弃依赖不稳定的九宫格 class
+// 🌟 终极验证码克星
 async function autoSolveCaptcha(page) {
     try {
         const bframe = page.frameLocator('iframe[src*="bframe"]').first();
         
-        // 直接去找我们要点的按钮，如果它们可见，说明验证码弹窗就在脸上！
         const solverBtn = bframe.locator('#solver-button');
         const audioBtn = bframe.locator('#recaptcha-audio-button');
         
@@ -218,3 +217,37 @@ async function autoSolveCaptcha(page) {
                 const waitBtn = targetPage.getByRole('button', { name: /PLEASE WAIT/i });
                 if (await waitBtn.isVisible({ timeout: 1000 })) {
                     success = true;
+                    console.log("🎉🎉 [步骤 8] 破阵成功！已进入 PLEASE WAIT 续期等待状态！");
+                    break;
+                }
+            } catch (e) {}
+        }
+
+        if (!success) {
+            throw new Error("🚨 [致命错误] 5分钟已耗尽，未能领到时间。");
+        }
+
+        console.log("==========================================");
+        console.log("🎉 全流程完美收官！发送电报通知...");
+        await sendTelegramMessage(`🎮 Gaming4Free 续期成功！\n账号: ${MC_USERNAME}`);
+
+    } catch (error) {
+        console.log("==========================================");
+        console.error("❌ 发生崩溃异常:", error.message);
+        
+        if (targetPage) {
+            try {
+                console.log("📸 正在对案发现场进行拍照取证...");
+                const screenshotPath = path.join(__dirname, 'screenshots', `error-${Date.now()}.png`);
+                await targetPage.screenshot({ path: screenshotPath });
+                console.log("✅ 取证完毕，截图已保存。");
+            } catch (e) {}
+        }
+        
+        await sendTelegramMessage(`⚠️ 续期脚本崩溃！\n账号: ${MC_USERNAME}\n报错: ${error.message.substring(0, 100)}...`);
+        process.exit(1);
+    } finally {
+        if (context) await context.close();
+        console.log("🛑 脚本进程强制结束。");
+    }
+})();
