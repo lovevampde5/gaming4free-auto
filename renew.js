@@ -8,7 +8,6 @@ const MC_PASSWORD = process.env.MC_PASSWORD;
 const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN;
 const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
-// 发送 TG 通知
 async function sendTelegramMessage(text) {
     if (!TG_BOT_TOKEN || !TG_CHAT_ID) return;
     const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`;
@@ -23,77 +22,89 @@ async function sendTelegramMessage(text) {
     }
 }
 
-// 🤖 核心功能：自动侦测并破解 reCAPTCHA
 async function autoSolveCaptcha(page) {
     try {
         const challengeFrame = page.frameLocator('iframe[src*="recaptcha/api2/bframe"]').first();
         const solverBtn = challengeFrame.locator('#solver-button');
         
         if (await solverBtn.isVisible({ timeout: 2000 })) {
-            console.log("🎧 发现 reCAPTCHA 验证码！正在呼叫 Buster 插件进行语音破解...");
+            console.log("  [侦测] 🎧 发现 reCAPTCHA 验证码！正在呼叫 Buster...");
             await solverBtn.click({ force: true });
-            
-            // 给 Buster 12 秒钟时间听音频并填写
+            console.log("  [侦测] ⏳ 已点击 Buster，等待 12 秒破解...");
             await page.waitForTimeout(12000); 
-            console.log("✅ Buster 破解流程执行完毕。");
+            console.log("  [侦测] ✅ Buster 破解等待结束。");
             return true;
         }
-    } catch (e) {
-        // 未检测到验证码，静默跳过
-    }
+    } catch (e) {}
     return false;
 }
 
 (async () => {
-    console.log("🚀 启动浏览器...");
+    console.log("==========================================");
+    console.log("🚀 [步骤 0] 脚本启动，开始准备环境...");
     const busterPath = path.join(__dirname, 'extensions', 'buster', 'unpacked');
+    console.log(`📂 [步骤 0] Buster 插件路径: ${busterPath}`);
     
-    // 显式创建一个临时文件夹存配置，防止 GitHub 环境下路径异常卡死
+    console.log("📂 [步骤 0] 正在创建浏览器临时配置文件...");
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pw-profile-')); 
+    console.log(`📂 [步骤 0] 临时配置目录已创建: ${userDataDir}`);
 
     let context;
     let targetPage;
 
     try {
+        console.log("🔥 [步骤 1] 正在点火启动浏览器 (赋予最高 3 分钟超时权限)...");
+        // 如果死在这里，说明 GitHub 服务器环境彻底拉垮
         context = await chromium.launchPersistentContext(userDataDir, {
             headless: false,
-            timeout: 60000, 
+            timeout: 180000, // 霸气给足 3 分钟启动时间
             args: [
                 `--disable-extensions-except=${busterPath}`,
                 `--load-extension=${busterPath}`,
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-gpu',
-                // ⚠️ 删除了 disable-software-rasterizer，让服务器用 CPU 软渲染画面，解决卡死问题
                 '--disable-dev-shm-usage',
-                '--window-size=1280,960'
+                '--window-size=1280,960',
+                '--ignore-certificate-errors',
+                '--disable-blink-features=AutomationControlled'
             ],
             ignoreDefaultArgs: ["--mute-audio"],
         });
+        console.log("✅ [步骤 1] 浏览器进程拉起成功！");
 
+        console.log("📄 [步骤 2] 正在创建新标签页...");
         const page = await context.newPage();
         targetPage = page;
+        console.log("✅ [步骤 2] 标签页创建成功！(从现在起如果报错，将会有截图)");
 
-        console.log("🌐 1. 访问前台登录页...");
+        console.log("🌐 [步骤 3] 正在访问前台登录页...");
         await targetPage.goto('https://gaming4free.net/login', { waitUntil: 'networkidle', timeout: 60000 });
+        console.log("✅ [步骤 3] 页面加载完成。");
 
-        console.log("🔑 输入前台账号密码...");
+        console.log("🔑 [步骤 4] 正在输入前台账号密码...");
         await targetPage.locator('input[type="email"]').fill(MC_USERNAME);
         await targetPage.locator('input[type="password"]').fill(MC_PASSWORD);
         await targetPage.getByRole('button', { name: 'Sign In' }).click();
+        console.log("⏳ [步骤 4] 已点击登录，等待跳转 Dashboard...");
 
-        await targetPage.waitForURL('**/dashboard**', { timeout: 30000 }).catch(() => {});
+        await targetPage.waitForURL('**/dashboard**', { timeout: 30000 }).catch(() => {
+            console.log("⚠️ [步骤 4] URL 未发生标准跳转，但将继续尝试执行后续逻辑...");
+        });
         await targetPage.waitForLoadState('networkidle');
 
-        console.log("🔍 检查前台新手引导弹窗...");
+        console.log("🔍 [步骤 5] 检查前台新手引导弹窗...");
         try {
             const skipBtn = targetPage.getByText('Skip', { exact: true });
             await skipBtn.waitFor({ state: 'visible', timeout: 5000 });
             await skipBtn.click();
+            console.log("👀 [步骤 5] 发现并跳过新手引导。");
             await targetPage.waitForTimeout(1000); 
-        } catch (error) {}
+        } catch (error) {
+            console.log("✅ [步骤 5] 无新手引导弹窗。");
+        }
 
-        console.log("🎛️ 2. 点击 Panel 准备进入后台...");
+        console.log("🎛️ [步骤 6] 寻找并点击 Panel 按钮进入后台...");
         const panelPromise = context.waitForEvent('page').catch(() => null);
         await targetPage.locator('a[target="_blank"]').last().click({ force: true });
         
@@ -101,95 +112,107 @@ async function autoSolveCaptcha(page) {
         if (newPage) {
             targetPage = newPage;
             await targetPage.waitForLoadState('domcontentloaded');
+            console.log("✅ [步骤 6] 已成功切换至后台新标签页。");
+        } else {
+            console.log("⚠️ [步骤 6] 未检测到新开标签页，继续在当前页面操作。");
         }
 
-        console.log("🔒 3. 到达后台登录页，执行二次登录...");
+        console.log("🔒 [步骤 7] 执行后台二次登录...");
         await targetPage.locator('input[type="email"], input[name="username"]').fill(MC_USERNAME);
         await targetPage.locator('input[type="password"]').fill(MC_PASSWORD);
         await targetPage.getByRole('button', { name: /LOGIN|登录/i }).click();
 
-        // 尝试破解登录时的验证码
+        console.log("🤖 [步骤 8] 检查后台登录时是否弹出验证码...");
         const solvedAtLogin = await autoSolveCaptcha(targetPage);
         if (solvedAtLogin) {
             try {
-                // 如果破解完没自动跳转，再点一次登录
                 const loginBtn = targetPage.getByRole('button', { name: /LOGIN|登录/i });
                 if (await loginBtn.isVisible({ timeout: 2000 })) {
                     await loginBtn.click({ force: true });
+                    console.log("✅ [步骤 8] 破解后已补点登录按钮。");
                 }
             } catch(e) {}
         }
 
-        console.log("🖥️ 4. 进入后台，寻找并点击你的服务器...");
+        console.log("🖥️ [步骤 9] 寻找你的服务器区块...");
         await targetPage.waitForLoadState('networkidle');
         await targetPage.waitForTimeout(3000);
-
-        // 如果你的服务器改名了，请把 My renqi 换掉！
+        
         const serverBlock = targetPage.getByText('My renqi', { exact: false }).first();
         await serverBlock.waitFor({ state: 'visible', timeout: 15000 });
         await serverBlock.click({ force: true });
+        console.log("✅ [步骤 9] 已点击服务器区块。");
         
         await targetPage.waitForLoadState('networkidle');
 
-        console.log("💻 5. 进入 Console 面板...");
+        console.log("💻 [步骤 10] 进入 Console 面板...");
         await targetPage.getByText('Console', { exact: true }).click();
         await targetPage.waitForLoadState('networkidle');
 
-        console.log("⏳ 寻找并点击 ADD 90 MINUTES...");
+        console.log("⏳ [步骤 11] 点击 ADD 90 MINUTES...");
         const addTimeBtn = targetPage.getByRole('button', { name: /ADD 90 MINUTES/i });
         await addTimeBtn.waitFor({ state: 'visible', timeout: 15000 });
         await addTimeBtn.click({ force: true });
+        console.log("✅ [步骤 11] 已点击续期按钮，进入看广告阶段。");
 
-        console.log("📺 6. 开启广告清障与验证码巡逻模式，等待续期生效...");
+        console.log("📺 [步骤 12] 开启最高 5 分钟的验证码巡逻与弹窗清理...");
         let success = false;
         
-        // 循环 60 次，每次等 5 秒，总计 5 分钟
-        for (let i = 0; i < 60; i++) {
-            await targetPage.waitForTimeout(5000);
+        for (let i = 1; i <= 60; i++) {
+            await targetPage.waitForTimeout(5000); // 每次等 5 秒
+            if (i % 6 === 0) console.log(`  -> 巡逻中... 已等待 ${i * 5} 秒`);
             
-            // 招式 1：按 ESC 关弹窗
             await targetPage.keyboard.press('Escape').catch(() => {});
             try {
                 const closeBtn = targetPage.locator('button[aria-label*="lose" i], [class*="close" i], svg.lucide-x').first();
                 if (await closeBtn.isVisible({ timeout: 500 })) {
                     await closeBtn.click({ force: true });
+                    console.log("  💥 [清理] 检测并强行关闭了一个广告弹窗！");
                 }
             } catch (e) {}
 
-            // 招式 2：巡逻验证码！应对你看完 30 秒广告后弹出的那个 reCAPTCHA
             await autoSolveCaptcha(targetPage);
 
-            // 招式 3：检查是否成功领到时间
             try {
                 const waitBtn = targetPage.getByRole('button', { name: /PLEASE WAIT/i });
                 if (await waitBtn.isVisible({ timeout: 1000 })) {
                     success = true;
-                    console.log("✅ 成功领到时间！已进入 PLEASE WAIT 续期等待状态！");
+                    console.log("🎉🎉 [步骤 12] 破阵成功！已进入 PLEASE WAIT 续期等待状态！");
                     break;
                 }
             } catch (e) {}
         }
 
         if (!success) {
-            throw new Error("🚨 5分钟内未能跳回控制台或验证码无法通过。");
+            throw new Error("🚨 [致命错误] 5分钟已耗尽，未能跳回控制台，广告页面可能卡死或验证码无法通过。");
         }
 
-        console.log("🎉 续期全流程顺利完成！");
+        console.log("==========================================");
+        console.log("🎉 全流程完美收官！发送电报通知...");
         await sendTelegramMessage(`🎮 Gaming4Free 续期成功！\n账号: ${MC_USERNAME}`);
 
     } catch (error) {
-        console.error("❌ 发生错误:", error);
+        console.log("==========================================");
+        console.error("❌ 发生崩溃异常:", error.message);
+        
         if (targetPage) {
             try {
+                console.log("📸 正在对案发现场进行拍照取证...");
                 const screenshotPath = path.join(__dirname, 'screenshots', `error-${Date.now()}.png`);
                 await targetPage.screenshot({ path: screenshotPath });
-                console.log("📸 已保存案发现场截图！");
-            } catch (e) {}
+                console.log("✅ 取证完毕，截图已保存。");
+            } catch (e) {
+                console.error("⚠️ 拍照取证失败:", e.message);
+            }
+        } else {
+            console.log("⚠️ 浏览器在启动阶段直接暴毙，无法提取网页截图。");
+            console.log("💡 如果你看到这条信息，说明是 GitHub 服务器分配的机器太卡，连浏览器都打不开。");
         }
+        
         await sendTelegramMessage(`⚠️ 续期脚本崩溃！\n账号: ${MC_USERNAME}\n报错: ${error.message.substring(0, 100)}...`);
         process.exit(1);
     } finally {
         if (context) await context.close();
-        console.log("🛑 脚本运行结束。");
+        console.log("🛑 脚本进程强制结束。");
     }
 })();
