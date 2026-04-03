@@ -52,7 +52,7 @@ async function autoSolveCaptcha(page) {
                 console.log("  [侦测] ✅ Buster 破解动作执行完毕。");
                 return true;
             } else {
-                console.log("  [侦测] 🚨 致命异常：已经切入语音模式，但 Buster 插件仍未加载！(可能被拦截)");
+                console.log("  [侦测] 🚨 致命异常：已经切入语音模式，但 Buster 插件仍未加载！(可能被拦截或文件缺失)");
             }
         }
     } catch (e) {}
@@ -61,24 +61,26 @@ async function autoSolveCaptcha(page) {
 
 (async () => {
     console.log("==========================================");
-    console.log("🚀 [步骤 0] 脚本启动，执行环境自检与自动修复...");
+    console.log("🚀 [步骤 0] 脚本启动，执行环境自检与强力自动修复...");
     
     // =====================================
-    // 🌟 核心升级：全自动下载配置 Buster 插件
+    // 🌟 核心升级 2.0：使用 curl -L 强力下载，并检查核心文件
     // =====================================
     const busterPath = path.join(os.tmpdir(), 'buster-extension');
-    if (!fs.existsSync(busterPath)) {
-        console.log("📥 [环境修复] 未检测到 Buster 插件，正在全自动下载官方版本...");
+    // 检查不仅是文件夹存在，还要确保里面的核心文件在
+    if (!fs.existsSync(path.join(busterPath, 'manifest.json'))) {
+        console.log("📥 [环境修复] 正在使用强力 curl 工具下载 Buster 官方版本...");
         try {
             fs.mkdirSync(busterPath, { recursive: true });
-            execSync('wget -qO /tmp/buster.zip https://github.com/dessant/buster/releases/download/v2.0.1/buster-extension-2.0.1-chrome.zip');
-            execSync(`unzip -o -q /tmp/buster.zip -d ${busterPath}`);
+            // 使用 stdio: 'inherit' 可以把下载进度和报错直接打印到日志里，一目了然
+            execSync('curl -L -o /tmp/buster.zip https://github.com/dessant/buster/releases/download/v2.0.1/buster-extension-2.0.1-chrome.zip', { stdio: 'inherit' });
+            execSync(`unzip -o /tmp/buster.zip -d ${busterPath}`, { stdio: 'inherit' });
             console.log(`✅ [环境修复] Buster 插件下载并解压成功: ${busterPath}`);
         } catch (e) {
             console.error("🚨 [环境修复致命错误] 下载或解压 Buster 失败！", e.message);
         }
     } else {
-        console.log(`✅ [环境检查] 找到本地已存在的 Buster 插件: ${busterPath}`);
+        console.log(`✅ [环境检查] 找到本地已存在的完整 Buster 插件: ${busterPath}`);
     }
     // =====================================
 
