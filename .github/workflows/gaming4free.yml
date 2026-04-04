@@ -11,8 +11,8 @@ permissions:
 
 jobs:
   run:
-    # 🌟 终极绝杀：把系统换成 macos-13，获取极高信誉度的干净 IP 池！
-    runs-on: macos-13
+    # 🌟 修复：直接使用 GitHub 官方推荐的最新苹果系统标签
+    runs-on: macos-latest
     timeout-minutes: 15
 
     steps:
@@ -30,7 +30,6 @@ jobs:
         with:
           node-version: 20
 
-      # Mac 原生自带绝大多数依赖，不需要装 xvfb 这种 Linux 虚拟显示器了
       - name: Install playwright
         run: |
           npm init -y
@@ -50,7 +49,6 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           mkdir -p screenshots
-          # Mac 下直接运行即可，无需 xvfb-run
           node renew.js
 
       - name: Upload screenshots
