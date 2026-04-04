@@ -26,7 +26,7 @@ async function sendTelegramMessage(text) {
     } catch (e) {}
 }
 
-// 🌟 终极验证码克星：遍历排雷 + 底层 JS 强制触发
+// 🌟 终极验证码克星
 async function autoSolveCaptcha(page) {
     try {
         const bframeLocators = page.frameLocator('iframe[src*="api2/bframe"]');
@@ -76,7 +76,6 @@ async function autoSolveCaptcha(page) {
     console.log("==========================================");
     console.log("🚀 [步骤 0] 脚本启动，执行环境自检与强力自动修复...");
     
-    // 动态下载最新的 Buster 插件
     const busterPath = path.join(os.tmpdir(), 'buster-extension');
     if (!fs.existsSync(path.join(busterPath, 'manifest.json'))) {
         console.log("📥 [环境修复] 正在通过 GitHub API 动态追踪最新版 Buster 插件...");
@@ -106,7 +105,7 @@ async function autoSolveCaptcha(page) {
         context = await chromium.launchPersistentContext('', {
             headless: false, 
             timeout: 120000, 
-            proxy: { server: 'socks5://127.0.0.1:10808' }, // 🌟 核心：挂载本地刚刚跑起来的私有 Xray 节点！
+            proxy: { server: 'socks5://127.0.0.1:10808' }, // 🌟 挂载私有节点
             args: [
                 '--headless=new', 
                 `--disable-extensions-except=${busterPath}`,
@@ -185,8 +184,9 @@ async function autoSolveCaptcha(page) {
             console.log("✅ [步骤 4] 未发现登录框，已免密直达后台！");
         }
 
-        console.log("🖥️ [步骤 5] 正在点击你的 renqi 服务...");
-        const serverCard = targetPage.locator('a, div, span').filter({ hasText: /My renqi/i }).first();
+        console.log("🖥️ [步骤 5] 正在精准定位并点击你的 renqi 服务...");
+        // 🌟 终极修复：直接找页面上肉眼可见的 'My renqi' 文本元素，避开所有隐藏的大框架！
+        const serverCard = targetPage.getByText('My renqi', { exact: false }).filter({ state: 'visible' }).first();
         await serverCard.waitFor({ state: 'visible', timeout: 20000 });
         await serverCard.click({ force: true });
         await targetPage.waitForLoadState('networkidle');
