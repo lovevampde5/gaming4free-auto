@@ -14,8 +14,20 @@ const MC_PASSWORD = 'Qwer12138@';
 const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN;
 const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
+// 🌟 升级版通知模块：只在每天中午 12 点发声
 async function sendTelegramMessage(text) {
     if (!TG_BOT_TOKEN || !TG_CHAT_ID) return;
+    
+    // 获取当前时间的 UTC 小时数，并加上 8 换算为北京时间
+    const now = new Date();
+    const beijingHour = new Date(now.getTime() + 8 * 3600 * 1000).getUTCHours();
+    
+    // 如果当前不是北京时间 12 点（12:00 ~ 12:59），则强行静音
+    if (beijingHour !== 12) {
+        console.log(`🔕 [通知静音] 当前北京时间 ${beijingHour} 点。按规则仅在每天中午 12 点发送电报通知。`);
+        return;
+    }
+
     const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`;
     try {
         await fetch(url, {
@@ -23,7 +35,10 @@ async function sendTelegramMessage(text) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ chat_id: TG_CHAT_ID, text: text })
         });
-    } catch (e) {}
+        console.log("📢 TG 汇报通知已成功发送！");
+    } catch (e) {
+        console.error("❌ TG 汇报通知发送失败:", e);
+    }
 }
 
 // 🌟 终极验证码克星
@@ -198,11 +213,19 @@ async function autoSolveCaptcha(page) {
         await targetPage.waitForLoadState('networkidle');
         console.log("✅ [步骤 6] 已切换至 Console 控制台界面。");
 
-        console.log("⏳ [步骤 7] 寻找并点击 ADD 90 MINUTES...");
+        console.log("⏳ [步骤 7] 寻找 ADD 90 MINUTES 续期按钮...");
         const addTimeBtn = targetPage.getByRole('button', { name: /ADD 90 MINUTES/i });
-        await addTimeBtn.waitFor({ state: 'visible', timeout: 15000 });
-        await addTimeBtn.click({ force: true });
-        console.log("✅ [步骤 7] 已点击续期按钮，进入看广告防断网循环。");
+        
+        // 🌟 核心优化：如果按钮不在，说明还在冷却中，安全优雅地退出！
+        try {
+            await addTimeBtn.waitFor({ state: 'visible', timeout: 10000 });
+            await addTimeBtn.click({ force: true });
+            console.log("✅ [步骤 7] 已点击续期按钮，进入看广告防断网循环。");
+        } catch (e) {
+            console.log("ℹ️ [日常巡逻] 未发现续期按钮，时间大概率还在冷却中。本次巡逻安全结束，不作多余操作。");
+            await sendTelegramMessage(`🎮 Gaming4Free 巡逻正常\n账号: ${MC_USERNAME}\n状态: 续期冷却中，无需操作。`);
+            return; // 优雅退出，不会因为找不到按钮而报错崩溃
+        }
 
         console.log("📺 [步骤 8] 开启最高 5 分钟的验证码巡逻与弹窗清理...");
         let success = false;
@@ -239,18 +262,13 @@ async function autoSolveCaptcha(page) {
         console.log("==========================================");
         console.log("🎉 全流程完美收官！正在截取最新的冷却时间与剩余时间...");
         
-        // ==========================================
-        // 🌟 新增的成功状态截图代码
-        // ==========================================
-        await targetPage.waitForTimeout(3000); // 稍微多等3秒，确保网页UI把剩余时间和 PLEASE WAIT 按钮完全加载出来
+        await targetPage.waitForTimeout(3000); 
         const successPicPath = path.join(__dirname, 'screenshots', `success_renew_${Date.now()}.png`);
         
-        // 开启 fullPage 确保截取到屏幕下方的所有有效信息
         await targetPage.screenshot({ path: successPicPath, fullPage: true }); 
         console.log(`📸 成功状态截图已保存至: ${successPicPath} (可前往 GitHub Actions 页面下载查看)`);
-        // ==========================================
 
-        await sendTelegramMessage(`🎮 Gaming4Free 续期成功！\n账号: ${MC_USERNAME}`);
+        await sendTelegramMessage(`🎮 Gaming4Free 续期成功！\n账号: ${MC_USERNAME}\n状态: 已成功领取 90 分钟！`);
 
     } catch (error) {
         console.log("==========================================");
@@ -266,9 +284,9 @@ async function autoSolveCaptcha(page) {
         }
         
         await sendTelegramMessage(`⚠️ 续期脚本崩溃！\n账号: ${MC_USERNAME}\n报错: ${error.message.substring(0, 100)}...`);
-        process.exit(1);
+        process.exit(1); // 只有真正的崩溃才会报红退出
     } finally {
         if (context) await context.close();
-        console.log("🛑 脚本进程强制结束。");
+        console.log("🛑 脚本进程已安全关闭。");
     }
 })();
