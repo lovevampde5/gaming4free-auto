@@ -26,7 +26,7 @@ async function sendTelegramMessage(text) {
     } catch (e) {}
 }
 
-// 🌟 终极验证码克星：遍历排雷 + 底层 JS 强制触发
+// 🌟 终极验证码克星：使用 dispatchEvent 强制引爆点击事件
 async function autoSolveCaptcha(page) {
     try {
         // 获取页面里所有的验证码挑战框 (防幽灵弹窗)
@@ -36,44 +36,45 @@ async function autoSolveCaptcha(page) {
         for (let i = 0; i < count; i++) {
             const bframe = bframeLocators.nth(i);
             
-            // 判断当前这个框是否在屏幕上激活 (图片九宫格或语音面板可见)
+            // 判断当前这个框是否在屏幕上激活
             const isActive = await bframe.locator('.rc-imageselect-payload, .rc-audiochallenge-payload').first().isVisible({timeout: 1000}).catch(()=>false);
             
             if (isActive) {
                 console.log(`  [侦测] 🎧 锁定当前活动的 reCAPTCHA 弹窗 (Frame ${i})！`);
                 
-                // 1. 如果还在图片模式，强行切到语音模式
                 const audioBtn = bframe.locator('#recaptcha-audio-button');
-                if (await audioBtn.isVisible({timeout: 1000})) {
-                    console.log("  [侦测] 正在点击耳机切换至语音模式...");
-                    await audioBtn.click({force: true});
-                    await page.waitForTimeout(1500); // 等待切换动画
-                }
+                const solverBtn = bframe.locator('#solver-button');
 
-                // 2. 无视 Playwright 洁癖，直接把 JS 注入底层寻找并触发 Buster
-                console.log("  [侦测] 正在通过底层 JS 强行激活 Buster 插件...");
-                
-                // 给插件 3 秒钟时间注入按钮
-                await bframe.locator('#solver-button').waitFor({ state: 'attached', timeout: 3000 }).catch(()=>{});
+                // 给 Buster 插件 3 秒钟时间出现在 DOM 里
+                await solverBtn.waitFor({ state: 'attached', timeout: 3000 }).catch(()=>{});
 
-                // 注入核弹级强杀代码
-                const clicked = await bframe.locator(':root').evaluate((root) => {
-                    const solverBtn = root.querySelector('#solver-button');
-                    if (solverBtn) {
-                        solverBtn.click(); // 原生代码直接触发点击，无视遮挡
-                        return true;
-                    }
-                    return false;
-                }).catch(() => false);
-
-                if (clicked) {
-                    console.log("  [侦测] 🤖 成功强制触发 Buster！等待 15 秒聆听并破解...");
+                // 使用 count() 判断元素是否存在于源码中，哪怕被遮挡也算
+                if (await solverBtn.count() > 0) {
+                    console.log("  [侦测] 🤖 成功锁定 Buster！使用 dispatchEvent 强制引爆点击...");
+                    
+                    // 💥 核武器：直接触发底层事件，无视所有洁癖检查！
+                    await solverBtn.dispatchEvent('click');
+                    
+                    console.log("  [侦测] ⏳ 已经触发 Buster，等待 15 秒聆听并破解...");
                     await page.waitForTimeout(15000); 
                     console.log("  [侦测] ✅ Buster 破解回合结束。");
                     return true;
-                } else {
-                    console.log("  [侦测] 🚨 异常：当前框架内未找到 Buster 按钮，可能还在加载...");
+                } else if (await audioBtn.count() > 0) {
+                    // 如果没看到 Buster，先强行点耳机切入语音模式
+                    console.log("  [侦测] ⚠️ 未见 Buster，强行触发耳机按钮...");
+                    await audioBtn.dispatchEvent('click');
+                    await page.waitForTimeout(1500); 
+                    
+                    if (await solverBtn.count() > 0) {
+                        console.log("  [侦测] 🤖 语音模式下锁定 Buster！强制引爆点击...");
+                        await solverBtn.dispatchEvent('click');
+                        console.log("  [侦测] ⏳ 已经触发 Buster，等待 15 秒聆听并破解...");
+                        await page.waitForTimeout(15000); 
+                        console.log("  [侦测] ✅ Buster 破解回合结束。");
+                        return true;
+                    }
                 }
+                console.log("  [侦测] 🚨 异常：当前框架内仍未找到 Buster 按钮。");
             }
         }
     } catch (e) {
