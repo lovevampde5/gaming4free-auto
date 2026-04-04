@@ -1,4 +1,4 @@
-// 🌟 核心升级：引入隐身增强版 Playwright
+// 🌟 引入隐身增强版 Playwright
 const { chromium } = require('playwright-extra');
 const stealth = require('puppeteer-extra-plugin-stealth')();
 chromium.use(stealth); 
@@ -26,17 +26,14 @@ async function sendTelegramMessage(text) {
     } catch (e) {}
 }
 
-// 🌟 终极验证码克星：使用 dispatchEvent 强制引爆点击事件
+// 🌟 终极验证码克星：遍历排雷 + 底层 JS 强制触发
 async function autoSolveCaptcha(page) {
     try {
-        // 获取页面里所有的验证码挑战框 (防幽灵弹窗)
         const bframeLocators = page.frameLocator('iframe[src*="api2/bframe"]');
         const count = await bframeLocators.count();
         
         for (let i = 0; i < count; i++) {
             const bframe = bframeLocators.nth(i);
-            
-            // 判断当前这个框是否在屏幕上激活
             const isActive = await bframe.locator('.rc-imageselect-payload, .rc-audiochallenge-payload').first().isVisible({timeout: 1000}).catch(()=>false);
             
             if (isActive) {
@@ -45,22 +42,16 @@ async function autoSolveCaptcha(page) {
                 const audioBtn = bframe.locator('#recaptcha-audio-button');
                 const solverBtn = bframe.locator('#solver-button');
 
-                // 给 Buster 插件 3 秒钟时间出现在 DOM 里
                 await solverBtn.waitFor({ state: 'attached', timeout: 3000 }).catch(()=>{});
 
-                // 使用 count() 判断元素是否存在于源码中，哪怕被遮挡也算
                 if (await solverBtn.count() > 0) {
                     console.log("  [侦测] 🤖 成功锁定 Buster！使用 dispatchEvent 强制引爆点击...");
-                    
-                    // 💥 核武器：直接触发底层事件，无视所有洁癖检查！
                     await solverBtn.dispatchEvent('click');
-                    
                     console.log("  [侦测] ⏳ 已经触发 Buster，等待 15 秒聆听并破解...");
                     await page.waitForTimeout(15000); 
                     console.log("  [侦测] ✅ Buster 破解回合结束。");
                     return true;
                 } else if (await audioBtn.count() > 0) {
-                    // 如果没看到 Buster，先强行点耳机切入语音模式
                     console.log("  [侦测] ⚠️ 未见 Buster，强行触发耳机按钮...");
                     await audioBtn.dispatchEvent('click');
                     await page.waitForTimeout(1500); 
@@ -77,9 +68,7 @@ async function autoSolveCaptcha(page) {
                 console.log("  [侦测] 🚨 异常：当前框架内仍未找到 Buster 按钮。");
             }
         }
-    } catch (e) {
-        // 静默处理，不影响主流程
-    }
+    } catch (e) {}
     return false;
 }
 
@@ -87,6 +76,7 @@ async function autoSolveCaptcha(page) {
     console.log("==========================================");
     console.log("🚀 [步骤 0] 脚本启动，执行环境自检与强力自动修复...");
     
+    // 动态下载最新的 Buster 插件
     const busterPath = path.join(os.tmpdir(), 'buster-extension');
     if (!fs.existsSync(path.join(busterPath, 'manifest.json'))) {
         console.log("📥 [环境修复] 正在通过 GitHub API 动态追踪最新版 Buster 插件...");
@@ -98,7 +88,7 @@ async function autoSolveCaptcha(page) {
             let downloadUrl = chromeAsset ? chromeAsset.browser_download_url : 'https://github.com/dessant/buster/releases/download/v2.0.1/buster-extension-2.0.1-chrome.zip';
             
             execSync(`curl -L -o /tmp/buster.zip "${downloadUrl}"`, { stdio: 'inherit' });
-            execSync(`unzip -o /tmp/buster.zip -d ${busterPath}`, { stdio: 'inherit' });
+            execSync(`unzip -q -o /tmp/buster.zip -d ${busterPath}`, { stdio: 'inherit' });
             console.log(`✅ [环境修复] Buster 插件下载并解压成功: ${busterPath}`);
         } catch (e) {
             console.error("🚨 [环境修复致命错误] 下载或解压 Buster 失败！", e.message);
@@ -111,11 +101,12 @@ async function autoSolveCaptcha(page) {
     let targetPage;
 
     try {
-        console.log("🔥 [步骤 1] 正在点火启动浏览器 (启用隐身伪装 + 解除跨域限制的终极参数)...");
+        console.log("🔥 [步骤 1] 正在点火启动浏览器 (启用私有节点代理 + 隐身伪装)...");
         
         context = await chromium.launchPersistentContext('', {
             headless: false, 
             timeout: 120000, 
+            proxy: { server: 'socks5://127.0.0.1:10808' }, // 🌟 核心：挂载本地刚刚跑起来的私有 Xray 节点！
             args: [
                 '--headless=new', 
                 `--disable-extensions-except=${busterPath}`,
