@@ -1,9 +1,8 @@
-name: gaming4free renew (Free Proxy + Buster)
+name: gaming4free renew (Resi IP + Radar)
 
 on:
   workflow_dispatch:
   schedule:
-    # 🌟 修改为每小时运行一次
     - cron: "0 * * * *"
 
 permissions:
@@ -40,7 +39,6 @@ jobs:
           pactl load-module module-virtual-source source_name=virtual_mic || true
           pactl set-default-source virtual_mic || true
 
-      # 🌟 核心杀招：全自动配置你的私有节点！
       - name: Start Xray Proxy
         env:
           XRAY_CONFIG: ${{ secrets.XRAY_CONFIG }}
@@ -50,17 +48,17 @@ jobs:
           unzip -q xray.zip -d xray-core
           echo "$XRAY_CONFIG" > xray-core/raw_config.json
           
-          # 使用 jq 工具强行覆写代理端口为标准 10808，无视你原本的设置
+          # 强行注入 socks5 本地入口
           jq '.inbounds = [{"listen": "127.0.0.1", "port": 10808, "protocol": "socks", "settings": {"auth": "noauth", "udp": true}}]' xray-core/raw_config.json > xray-core/config.json
           
-          # 后台静默启动代理
+          # 后台启动代理
           ./xray-core/xray run -c xray-core/config.json > xray.log 2>&1 &
-          echo "正在等待私有节点连接..."
+          echo "正在连接美国动态家宽节点..."
           sleep 3
           
-          # 测试代理是否连通
-          PROXY_IP=$(curl -s -x socks5://127.0.0.1:10808 https://api.ipify.org || echo "代理连接失败，请检查配置")
-          echo "💥 伪装成功！当前突破 IP 为: $PROXY_IP"
+          # 测试代理联通性
+          PROXY_IP=$(curl -s -x socks5://127.0.0.1:10808 https://api.ipify.org || echo "代理连接失败")
+          echo "💥 伪装成功！当前家宽突破 IP 为: $PROXY_IP"
 
       - name: Install playwright
         run: |
@@ -69,11 +67,6 @@ jobs:
           npx playwright install chromium --with-deps
 
       - name: Run script
-        env:
-          MC_USERNAME: ${{ secrets.MC_USERNAME }}
-          MC_PASSWORD: ${{ secrets.MC_PASSWORD }}
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           mkdir -p screenshots
           xvfb-run -a node renew.js
