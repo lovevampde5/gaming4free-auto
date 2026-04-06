@@ -116,12 +116,32 @@ def run():
             page.locator('input:not([type="hidden"]):not([type="password"])').first.fill(USERNAME)
             page.locator('input[type="password"]').first.fill(PASSWORD)
             
-            print("🟢 点击登录按钮...")
-            page.get_by_role('button', name='LOGIN').first.click()
-            time.sleep(3)
+            print("🟢 尝试点击登录按钮并处理前端延迟...")
+            login_btn = page.get_by_role('button', name='LOGIN').first
+            
+            ready_to_solve = False
+            for i in range(5):
+                print(f"  -> [第 {i+1} 次] 触发登录动作...")
+                login_btn.click(force=True)
+                time.sleep(2)
+                
+                # 精准捕捉页面顶部那个红色的报错提示
+                error_toast = page.get_by_text("did not render yet", exact=False)
+                if error_toast.is_visible():
+                    print("  ⏳ [前端拦截] 网站报错底层验证码未加载！等待 5 秒后再试...")
+                    time.sleep(5)
+                else:
+                    print("  ✅ 登录动作被网站受理！进入盯防状态...")
+                    ready_to_solve = True
+                    break
+                    
+            if not ready_to_solve:
+                raise Exception("验证码模块死活不加载，网络可能存在问题")
+                
+            time.sleep(3) # 给验证码弹窗一点时间显示
             
             if page.locator('iframe[title="reCAPTCHA"]').is_visible():
-                print("⚠️ 探测到防御系统，启动验证码破解方案...")
+                print("⚠️ 探测到防御系统，启动验证码硬解方案...")
                 success = solve_audio_captcha(page)
                 if not success:
                     page.screenshot(path="screenshots/error_captcha.png", full_page=True)
