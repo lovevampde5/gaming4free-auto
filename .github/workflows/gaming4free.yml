@@ -27,7 +27,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb wget unzip curl jq p7zip-full pulseaudio alsa-utils ffmpeg
 
-      - name: Setup Audio (Hardware spoofing)
+      - name: Setup Audio
         run: |
           pulseaudio --start --exit-idle-time=-1 || true
           pactl load-module module-null-sink sink_name=virtual_speaker || true
@@ -40,24 +40,18 @@ jobs:
           XRAY_CONFIG: ${{ secrets.XRAY_CONFIG }}
         run: |
           LATEST_VERSION=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | jq -r .tag_name)
-          echo "Downloading sing-box $LATEST_VERSION..."
           wget -qO sing-box.tar.gz "https://github.com/SagerNet/sing-box/releases/download/${LATEST_VERSION}/sing-box-${LATEST_VERSION#v}-linux-amd64.tar.gz"
           tar -xzf sing-box.tar.gz
           mv sing-box-*/sing-box .
           chmod +x sing-box
-          
           echo "$XRAY_CONFIG" > config.json
           ./sing-box run -c config.json > proxy.log 2>&1 &
-          echo "正在使用 sing-box 强力连接动态家宽节点..."
           sleep 4
-          
-          PROXY_IP=$(curl -s -x socks5://127.0.0.1:10808 https://api.ipify.org || echo "代理连接失败")
-          echo "💥 伪装成功！当前出口 IP 为: $PROXY_IP"
 
       - name: Install Python Packages
         run: |
           pip install playwright pydub SpeechRecognition requests
-          playwright install chrome  # <--- 关键修改：安装完整的商业版 Chrome，支持广告解码
+          playwright install chrome  # 必须安装完整版 Chrome 以支持广告视频播放
 
       - name: Run Python Script
         run: |
