@@ -36,6 +36,7 @@ async function sendTelegramMessage(text) {
     } catch (e) {}
 }
 
+// 🌟 核心升级：绝对视觉判定！无视谷歌幽灵框架
 async function autoSolveCaptcha(page) {
     try {
         const frames = page.frames();
@@ -43,38 +44,43 @@ async function autoSolveCaptcha(page) {
             if (frame.url().includes('bframe') || frame.url().includes('fallback')) {
                 
                 const errorLocator = frame.locator('.rc-doscaptcha-header-text');
-                const solverBtn = frame.locator('#solver-button').first();
+                const solverBtn = frame.locator('#solver-button, .help-button-holder button').first();
                 const audioBtn = frame.locator('#recaptcha-audio-button').first();
 
-                if (await errorLocator.count() > 0 && await errorLocator.isVisible({timeout: 500}).catch(()=>false)) {
-                    if ((await errorLocator.innerText()).includes('Try again later')) return 'blocked';
-                }
+                // 🌟 只判断肉眼【真正可见】的按钮，彻底过滤幽灵框架
+                const isSolverVisible = await solverBtn.isVisible({timeout: 1000}).catch(()=>false);
+                const isAudioVisible = await audioBtn.isVisible({timeout: 1000}).catch(()=>false);
 
-                if (await solverBtn.count() > 0) {
-                    console.log("  [透视雷达] 🤖 发现 Buster！使用真鼠点击...");
+                // 1. 如果 Buster 已经可见（可能已经被切到了语音模式），直接点！
+                if (isSolverVisible) {
+                    console.log("  [透视雷达] 🤖 锁定真正可见的 Buster！执行物理点击...");
                     await solverBtn.click({ force: true });
                     await page.waitForTimeout(15000);
                     return 'solved';
                 }
 
-                if (await audioBtn.count() > 0) {
-                    console.log("  [透视雷达] ⚠️ 发现耳机！使用真鼠点击切入语音...");
+                // 2. 如果看到的是耳机，说明活框架正在等我们切语音
+                if (isAudioVisible) {
+                    console.log("  [透视雷达] ⚠️ 锁定真正可见的耳机图标！点击切入语音...");
                     await audioBtn.click({ force: true });
                     
-                    // 🌟 延长等待时间，给 Buster 充分的注入机会
+                    // 等 3.5 秒让界面翻转，Buster 加载出来
                     await page.waitForTimeout(3500); 
 
-                    if (await errorLocator.count() > 0 && await errorLocator.isVisible({timeout: 500}).catch(()=>false)) {
+                    // 检查是不是被谷歌拦截了
+                    if (await errorLocator.isVisible({timeout: 1000}).catch(()=>false)) {
                         if ((await errorLocator.innerText()).includes('Try again later')) return 'blocked';
                     }
 
-                    if (await solverBtn.count() > 0) {
-                        console.log("  [透视雷达] 🤖 语音模式就绪，点击 Buster...");
+                    // 重新检测 Buster 在翻转后是否可见
+                    const isSolverVisibleNow = await solverBtn.isVisible({timeout: 2000}).catch(()=>false);
+                    if (isSolverVisibleNow) {
+                        console.log("  [透视雷达] 🤖 语音模式就绪，可见 Buster，执行暴击...");
                         await solverBtn.click({ force: true });
                         await page.waitForTimeout(15000);
                         return 'solved';
                     } else {
-                        console.log("  [透视雷达] ❌ 异常：成功切入语音，但 Buster 小黄人未能加载！");
+                        console.log("  [透视雷达] ❌ 异常：耳机已点击，但在当前活框架中依然未见 Buster。");
                         return 'no_buster';
                     }
                 }
@@ -213,7 +219,7 @@ async function autoSolveCaptcha(page) {
         }
 
         let globalSuccess = false;
-        let noBusterCount = 0; // 记录 Buster 消失的次数
+        let noBusterCount = 0; 
 
         for (let i = 1; i <= 30; i++) {
             await targetPage.waitForTimeout(5000); 
@@ -222,16 +228,18 @@ async function autoSolveCaptcha(page) {
             const capStatus = await autoSolveCaptcha(targetPage);
             
             if (capStatus === 'blocked') {
-                console.log("🚨 验证码环节遭遇拦截 (Try again later)！立刻拍照并终止任务！");
+                console.log("🚨 验证码遭遇拦截 (Try again later)！立刻拍照并终止任务！");
                 await targetPage.screenshot({ path: path.join(screenshotDir, `analysis_blocked_${Date.now()}.png`), fullPage: true }).catch(()=>{});
                 break;
             } else if (capStatus === 'no_buster') {
                 noBusterCount++;
-                if (noBusterCount >= 2) {
-                    console.log("📸 连续 2 次成功切入语音，却找不到 Buster 小黄人！立刻拍照取证并终止任务！");
+                if (noBusterCount >= 3) {
+                    console.log("📸 连续 3 次找不到 Buster！可能被前端彻底屏蔽！");
                     await targetPage.screenshot({ path: path.join(screenshotDir, `analysis_no_buster_${Date.now()}.png`), fullPage: true }).catch(()=>{});
                     break; 
                 }
+            } else if (capStatus === 'solved') {
+                noBusterCount = 0; // 重置计数器，防止误判
             }
 
             try {
@@ -254,6 +262,6 @@ async function autoSolveCaptcha(page) {
         console.log(`💥 流程提前终止: ${error.message}`);
     } finally {
         if (context) await context.close().catch(()=>{});
-        console.log("🛑 脚本进程已安全关闭。等待你的截图分析！");
+        console.log("🛑 脚本进程已安全关闭。等待你的捷报！");
     }
 })();
