@@ -240,15 +240,24 @@ def run():
                 renew_btn.click(force=True)
                 print("✅ 成功点击续期！拥有真实解码器的 Chrome 正在硬扛视频广告...")
                 
+                # ======== 🌟 核心修复区 1：盲点唤醒 ========
+                print("🖱️ 模拟真实鼠标：盲点屏幕中心，尝试强制唤醒休眠的视频广告...")
+                try:
+                    page.mouse.click(960, 540)
+                    time.sleep(1)
+                    page.mouse.click(960, 540)
+                except:
+                    pass
+                # ==========================================
+
                 global_success = False
                 consecutive_captcha_fails = 0
-                radar_cooldown_end = 0 # 🌟 新增：雷达强制冷却时间戳
+                radar_cooldown_end = 0 
                 
-                for check_round in range(1, 21): # 稍微放宽到 100 秒总长
+                for check_round in range(1, 21): 
                     time.sleep(5)
                     print(f"  -> 🔍 第 {check_round} 次心跳检测...")
                     
-                    # 🌟 核心防干扰逻辑：如果在冷却期内，雷达强制闭嘴看广告
                     current_time = time.time()
                     if current_time > radar_cooldown_end:
                         challenge_popped = False
@@ -273,7 +282,7 @@ def run():
                                 print("🛑 连续 2 次提取音频失败！判定当前为广告遮挡下的【幽灵框架】！")
                                 print("🛑 雷达将强制进入 30 秒静默冷却期，绝不干扰广告播放！")
                                 radar_cooldown_end = current_time + 30
-                                consecutive_captcha_fails = 0 # 重置计数器以便冷却后再次工作
+                                consecutive_captcha_fails = 0 
                     else:
                         print(f"  [雷达冷却中 🧊] 脚本正在乖乖挂机看广告... (剩余冷却约 {int(radar_cooldown_end - current_time)} 秒)")
                                 
@@ -286,13 +295,27 @@ def run():
                     except Exception:
                         pass
                 
+                # ======== 🌟 核心修复区 2：强制刷新核验 ========
+                if not global_success:
+                    print("⚠️ 100秒侦测完毕依然在转圈！前端可能假死。执行 F5 强制刷新进行最终核验...")
+                    try:
+                        page.reload(wait_until="domcontentloaded", timeout=20000)
+                        time.sleep(5)
+                        verify_btn = page.get_by_role("button", name=re.compile("PLEASE WAIT", re.IGNORECASE))
+                        if verify_btn.is_visible(timeout=5000):
+                            print("🎯 峰回路转！刷新后发现时长已在后台悄悄到账！按钮状态已更新！")
+                            global_success = True
+                    except Exception as e:
+                        print(f"刷新核验异常: {e}")
+                # ==============================================
+
                 if global_success:
                     time.sleep(2) 
                     page.screenshot(path="screenshots/success_renew.png", full_page=True)
                     send_telegram_message(f"🎮 Gaming4Free 续期成功！\n账号: {USERNAME}\n状态: 成功熬过广告并斩获 90 分钟！")
                     print("🎉🎉 破阵成功！全流程完美收官！")
                 else:
-                    print("⚠️ 侦测超时 (100秒)，未捕捉到 PLEASE WAIT。可能广告仍未播完或遭遇代理拦截。")
+                    print("❌ 彻底失败：刷新后依然没有冷却按钮，广告绝对被拦截了。请检查 Sing-box 是否拦截了 ads 域名！")
                     page.screenshot(path="screenshots/timeout_renew.png", full_page=True)
             else:
                 print("ℹ️ 未找到 ADD 90 MINUTES 按钮。")
