@@ -39,7 +39,6 @@ def solve_audio_captcha(page):
     """
     print("  [透视雷达] 正在扫描验证码框架...")
     try:
-        # 1. 探测显式复选框 (兼容显式和隐式模式)
         checkbox_clicked = False
         for f in page.frames:
             if 'anchor' in f.url or 'recaptcha' in f.url:
@@ -57,7 +56,6 @@ def solve_audio_captcha(page):
         if not checkbox_clicked:
             print("  [透视雷达] 未发现/未点击复选框，判定为 Invisible 模式，准备拦截九宫格...")
 
-        # 2. 动态遍历扫描：寻找真实可见的挑战弹窗 (最高等待15秒)
         print("  [透视雷达] 开启全栈扫描：寻找可见的耳机图标...")
         target_frame = None
         audio_btn = None
@@ -67,7 +65,6 @@ def solve_audio_captcha(page):
                 if 'bframe' in f.url or 'recaptcha' in f.url:
                     try:
                         btn = f.locator('#recaptcha-audio-button')
-                        # 核心逻辑：只锁定真正 visible 的耳机图标
                         if btn.is_visible():
                             target_frame = f
                             audio_btn = btn
@@ -76,24 +73,21 @@ def solve_audio_captcha(page):
                         pass
             if target_frame:
                 break
-            time.sleep(1) # 每秒扫描一次当前 DOM 树
+            time.sleep(1)
 
         if not target_frame or not audio_btn:
             print("  [透视雷达] ✅ 15秒扫描未发现验证码弹窗，判定为信用免检，直接通过！")
             return True
 
-        # 3. 开始执行硬解
         print("  [透视雷达] 🎯 锁定目标弹窗！切入音频模式...")
         audio_btn.click()
         time.sleep(2)
 
-        # 检查是否被 Google 封锁音频通道
         error_msg = target_frame.locator('.rc-doscaptcha-header-text')
         if error_msg.is_visible(timeout=2000) and "Try again later" in error_msg.inner_text():
             print("  [透视雷达] 🚨 遭遇 Google 信用降级拦截 (音频通道被封锁)！")
             return False
 
-        # 4. 截获音频文件直链
         audio_url = target_frame.locator('#audio-source').get_attribute('src')
         if not audio_url:
             print("  [透视雷达] ❌ 无法获取音频 URL")
@@ -106,7 +100,6 @@ def solve_audio_captcha(page):
         sound = AudioSegment.from_mp3("captcha.mp3")
         sound.export("captcha.wav", format="wav")
 
-        # 5. 离线/云端语音解码
         print("  [透视雷达] 🧠 启动神经语音解码...")
         recognizer = sr.Recognizer()
         with sr.AudioFile("captcha.wav") as source:
@@ -114,7 +107,6 @@ def solve_audio_captcha(page):
             text = recognizer.recognize_google(audio_data)
             print(f"  [透视雷达] 🔓 解码成功！验证密码为: {text}")
 
-        # 6. 回填答案并击穿验证
         target_frame.locator('#audio-response').fill(text)
         target_frame.locator('#recaptcha-verify-button').click()
         time.sleep(4)
@@ -182,16 +174,23 @@ def run():
                 page.screenshot(path="screenshots/error_captcha.png", full_page=True)
                 raise Exception("CAPTCHA_FAILED")
             
-            print("⏳ 等待跳转控制台...")
-            page.wait_for_url('**/dashboard**', timeout=20000)
-            print("🎉 突破大门，成功进入后台！")
+            # ======== 关键修复区 ========
+            print("⏳ 等待控制台界面渲染...")
+            # 抛弃死板的 URL 等待，直接等待页面上出现 "My renqi" 这个特征文本
+            page.wait_for_selector('text="My renqi"', timeout=20000)
+            print("🎉 突破大门，成功进入后台服务器列表！")
             
-            print("🖥️ 定位 renqi 服务...")
+            print("🖥️ 定位并点击 renqi 服务...")
             page.get_by_text('My renqi', exact=False).first.click()
             page.wait_for_load_state('networkidle')
+            time.sleep(3) # 给进入服务详情页一点缓冲时间
             
+            # 点击 Console 菜单
+            print("🎛️ 切换至 Console 面板...")
             page.locator('a').filter(has_text='Console').first.click()
             page.wait_for_load_state('networkidle')
+            time.sleep(3)
+            # ============================
             
             print("⏳ 准备续期...")
             renew_btn = page.get_by_role('button', name='ADD 90 MINUTES').first
@@ -210,6 +209,7 @@ def run():
                 print("🎉🎉 破阵成功！全流程完美收官！")
             else:
                 print("ℹ️ 未找到可点击的续期按钮，可能在冷却中。")
+                page.screenshot(path="screenshots/cooldown.png", full_page=True)
                 
         except Exception as e:
             print(f"💥 流程提前终止: {e}")
