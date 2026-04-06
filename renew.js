@@ -130,24 +130,40 @@ async function autoSolveCaptcha(page) {
         const screenshotDir = path.join(__dirname, 'screenshots');
         if (!fs.existsSync(screenshotDir)) fs.mkdirSync(screenshotDir);
 
-        console.log("🌐 [步骤 3] 直达核心 Panel 面板 (等待家宽慢速加载)...");
-        // 🌟 放宽初始加载时间
+        console.log("🌐 [步骤 3] 直达核心 Panel 面板...");
         await targetPage.goto('https://panel.gaming4free.net', { waitUntil: 'domcontentloaded', timeout: 90000 });
-        await targetPage.waitForTimeout(5000); // 强行等5秒，让 Cloudflare 盾牌飞一会儿
 
-        console.log("🔒 [步骤 4] 寻找登录框...");
-        const emailInput = targetPage.locator('input[name="user"], input[type="email"]').filter({ state: 'visible' }).first();
+        // ==========================================
+        // 🌟 核心重写：[步骤 4] 最暴力的页面状态判断
+        // ==========================================
+        console.log("🔒 [步骤 4] 正在解析当前页面状态...");
         
-        // 🌟 核心修复：给家宽代理 45 秒的时间去刷出登录框
-        await emailInput.waitFor({ state: 'visible', timeout: 45000 }).catch(() => {});
+        const pwdInput = targetPage.locator('input[type="password"]').first();
+        const serverLabel = targetPage.getByText('My renqi', { exact: false }).first();
 
-        if (await emailInput.isVisible()) {
-            console.log(`🔑 成功找到登录框，填入账号: ${MC_USERNAME}`);
-            await emailInput.fill(MC_USERNAME);
-            await targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first().fill(MC_PASSWORD);
-            await targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first().click({ force: true });
-            console.log("⏳ 账号密码提交！盯防验证码...");
+        let pageType = 'none';
+        for(let i=0; i<15; i++) {
+            if (await pwdInput.isVisible()) { pageType = 'login'; break; }
+            if (await serverLabel.isVisible()) { pageType = 'dashboard'; break; }
+            await targetPage.waitForTimeout(3000); 
+        }
 
+        if (pageType === 'none') {
+            console.log("🚨 [致命错误] 45秒内未加载出任何有效页面！可能是高延迟或网络断开。");
+            await targetPage.screenshot({ path: path.join(screenshotDir, `error_nologin_${Date.now()}.png`), fullPage: true }).catch(()=>{});
+            throw new Error("找不到登录页面或后台页面，无法继续！");
+        }
+
+        if (pageType === 'login') {
+            console.log(`🔑 发现登录框！正在填入账号: ${MC_USERNAME}`);
+            
+            // 🌟 暴力定位：无视名字，直接找第一个非隐藏文本框当用户名
+            const userInput = targetPage.locator('input:not([type="hidden"]):not([type="password"])').first();
+            await userInput.fill(MC_USERNAME);
+            await pwdInput.fill(MC_PASSWORD);
+            await targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).first().click({ force: true });
+            
+            console.log("⏳ 账号密码已提交！盯防验证码...");
             let loginSuccess = false;
             for (let i = 0; i < 20; i++) { 
                 if (!targetPage.url().includes('auth/login')) {
@@ -168,10 +184,7 @@ async function autoSolveCaptcha(page) {
                  return; 
             }
         } else {
-            // 🌟 核心修复：如果找不到登录框，绝不再自作聪明，直接拍照报警
-            console.log("🚨 [致命错误] 45秒内未加载出登录框！可能是高延迟或被 Cloudflare 拦截。");
-            await targetPage.screenshot({ path: path.join(screenshotDir, `error_nologin_${Date.now()}.png`), fullPage: true }).catch(()=>{});
-            throw new Error("找不到登录页面，无法继续！");
+            console.log("✅ 检测到服务器卡片，已免密直达后台！");
         }
 
         console.log("🖥️ [步骤 5] 正在精确定位并点击你的 renqi 服务...");
