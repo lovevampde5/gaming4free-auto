@@ -36,50 +36,57 @@ async function sendTelegramMessage(text) {
     } catch (e) {}
 }
 
-// 🌟 带有“透视眼”状态反馈的底层强杀模块
+// 🌟 极度耐心的验证码狙击模块
 async function autoSolveCaptcha(page) {
     try {
         const frames = page.frames();
         for (const frame of frames) {
             if (frame.url().includes('bframe') || frame.url().includes('fallback')) {
-                const status = await frame.evaluate(() => {
-                    const errorMsg = document.querySelector('.rc-doscaptcha-header-text'); 
-                    if (errorMsg && errorMsg.innerText.includes('Try again later')) return 'blocked';
-                    
-                    const solverBtn = document.querySelector('#solver-button');
-                    const audioBtn = document.querySelector('#recaptcha-audio-button');
-                    
-                    if (solverBtn) { solverBtn.click(); return 'clicked_buster'; }
-                    if (audioBtn) { audioBtn.click(); return 'clicked_audio'; }
-                    return 'none';
-                }).catch(() => 'error');
-
-                if (status === 'blocked') {
-                    console.log("  [透视雷达] 🚨 致命错误：当前 IP 被彻底拉黑，请求语音被谷歌拒绝 (Try again later)！");
+                
+                // 1. 检查是否被谷歌直接拉黑死锁
+                const blockMsg = await frame.locator('.rc-doscaptcha-header-text').innerText().catch(() => '');
+                if (blockMsg.includes('Try again later')) {
+                    console.log("  [透视雷达] 🚨 致命错误：当前 IP 请求被谷歌拦截 (Try again later)！");
                     return 'blocked';
-                } else if (status === 'clicked_buster') {
-                    console.log("  [透视雷达] 🤖 发现验证码！已成功按下 Buster 小黄人，等待 15 秒破解...");
-                    await page.waitForTimeout(15000); 
-                    return 'solved';
-                } else if (status === 'clicked_audio') {
-                    console.log("  [透视雷达] ⚠️ 发现验证码！无 Buster，正在强行切入语音模式...");
-                    await page.waitForTimeout(2000); 
-                    
-                    const retryStatus = await frame.evaluate(() => {
-                        const errorMsg = document.querySelector('.rc-doscaptcha-header-text'); 
-                        if (errorMsg && errorMsg.innerText.includes('Try again later')) return 'blocked';
-                        const btn = document.querySelector('#solver-button');
-                        if (btn) { btn.click(); return 'clicked_buster'; }
-                        return 'none';
-                    }).catch(() => 'none');
-                    
-                    if (retryStatus === 'blocked') {
-                        console.log("  [透视雷达] 🚨 致命错误：切入语音瞬间被谷歌拦截 (Try again later)！");
-                        return 'blocked';
-                    } else if (retryStatus === 'clicked_buster') {
-                        console.log("  [透视雷达] 🤖 语音模式下成功按下 Buster！等待 15 秒破解...");
-                        await page.waitForTimeout(15000); 
+                }
+
+                const audioBtn = frame.locator('#recaptcha-audio-button');
+                const solverBtn = frame.locator('#solver-button');
+
+                // 2. 只有确认耳机图标完全显示出来了，才说明验证码加载好了
+                if (await audioBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                    console.log("  [透视雷达] 🎧 发现验证码！由于美国节点延迟，正在耐心等待 Buster 插件注入 (最高10秒)...");
+
+                    // 🌟 核心修复：死死盯住页面，给插件 10 秒的注入时间
+                    await solverBtn.waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
+
+                    if (await solverBtn.count() > 0) {
+                        console.log("  [透视雷达] 🤖 锁定 Buster 小黄人！发送物理强制点击...");
+                        await solverBtn.click({ force: true });
+                        await page.waitForTimeout(15000); // 留足 15 秒给它听语音并填写
                         return 'solved';
+                    } else {
+                        console.log("  [透视雷达] ⚠️ 10秒过去未见 Buster。强行切入语音模式试试...");
+                        await audioBtn.click({ force: true });
+                        await page.waitForTimeout(3000); 
+
+                        // 切入语音后再次检查是否被拉黑
+                        const blockMsg2 = await frame.locator('.rc-doscaptcha-header-text').innerText().catch(() => '');
+                        if (blockMsg2.includes('Try again later')) {
+                            console.log("  [透视雷达] 🚨 致命错误：切入语音瞬间被谷歌拦截！");
+                            return 'blocked';
+                        }
+
+                        // 再次寻找 Buster
+                        await solverBtn.waitFor({ state: 'attached', timeout: 8000 }).catch(() => {});
+                        if (await solverBtn.count() > 0) {
+                            console.log("  [透视雷达] 🤖 语音模式下锁定 Buster！发送强杀点击...");
+                            await solverBtn.click({ force: true });
+                            await page.waitForTimeout(15000); 
+                            return 'solved';
+                        } else {
+                            console.log("  [透视雷达] ❌ 彻底找不到 Buster 按钮！");
+                        }
                     }
                 }
             }
@@ -130,14 +137,11 @@ async function autoSolveCaptcha(page) {
         const screenshotDir = path.join(__dirname, 'screenshots');
         if (!fs.existsSync(screenshotDir)) fs.mkdirSync(screenshotDir);
 
-        console.log("🌐 [步骤 3] 直达核心 Panel 面板...");
+        console.log("🌐 [步骤 3] 直达核心 Panel 面板 (等待家宽慢速加载)...");
         await targetPage.goto('https://panel.gaming4free.net', { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await targetPage.waitForTimeout(5000); 
 
-        // ==========================================
-        // 🌟 核心重写：[步骤 4] 最暴力的页面状态判断
-        // ==========================================
         console.log("🔒 [步骤 4] 正在解析当前页面状态...");
-        
         const pwdInput = targetPage.locator('input[type="password"]').first();
         const serverLabel = targetPage.getByText('My renqi', { exact: false }).first();
 
@@ -149,15 +153,13 @@ async function autoSolveCaptcha(page) {
         }
 
         if (pageType === 'none') {
-            console.log("🚨 [致命错误] 45秒内未加载出任何有效页面！可能是高延迟或网络断开。");
+            console.log("🚨 [致命错误] 45秒内未加载出任何有效页面！");
             await targetPage.screenshot({ path: path.join(screenshotDir, `error_nologin_${Date.now()}.png`), fullPage: true }).catch(()=>{});
             throw new Error("找不到登录页面或后台页面，无法继续！");
         }
 
         if (pageType === 'login') {
             console.log(`🔑 发现登录框！正在填入账号: ${MC_USERNAME}`);
-            
-            // 🌟 暴力定位：无视名字，直接找第一个非隐藏文本框当用户名
             const userInput = targetPage.locator('input:not([type="hidden"]):not([type="password"])').first();
             await userInput.fill(MC_USERNAME);
             await pwdInput.fill(MC_PASSWORD);
