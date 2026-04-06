@@ -57,7 +57,7 @@ jobs:
       - name: Install Python Packages
         run: |
           pip install playwright pydub SpeechRecognition requests
-          playwright install chromium
+          playwright install chrome  # <--- 关键修改：安装完整的商业版 Chrome，支持广告解码
 
       - name: Run Python Script
         run: |
