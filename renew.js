@@ -60,7 +60,9 @@ async function autoSolveCaptcha(page) {
                 if (await audioBtn.count() > 0) {
                     console.log("  [透视雷达] ⚠️ 发现耳机！使用真鼠点击切入语音...");
                     await audioBtn.click({ force: true });
-                    await page.waitForTimeout(2500); 
+                    
+                    // 🌟 延长等待时间，给 Buster 充分的注入机会
+                    await page.waitForTimeout(3500); 
 
                     if (await errorLocator.count() > 0 && await errorLocator.isVisible({timeout: 500}).catch(()=>false)) {
                         if ((await errorLocator.innerText()).includes('Try again later')) return 'blocked';
@@ -71,6 +73,9 @@ async function autoSolveCaptcha(page) {
                         await solverBtn.click({ force: true });
                         await page.waitForTimeout(15000);
                         return 'solved';
+                    } else {
+                        console.log("  [透视雷达] ❌ 异常：成功切入语音，但 Buster 小黄人未能加载！");
+                        return 'no_buster';
                     }
                 }
             }
@@ -106,163 +111,149 @@ async function autoSolveCaptcha(page) {
     const screenshotDir = path.join(__dirname, 'screenshots');
     if (!fs.existsSync(screenshotDir)) fs.mkdirSync(screenshotDir);
 
-    let globalSuccess = false;
+    let context;
+    try {
+        console.log("🔥 [步骤 1] 点火启动浏览器...");
+        context = await chromium.launchPersistentContext('', {
+            headless: false, 
+            timeout: 120000, 
+            proxy: { server: 'socks5://127.0.0.1:10808' }, 
+            args: [
+                '--headless=new', 
+                `--disable-extensions-except=${busterPath}`,
+                `--load-extension=${busterPath}`,
+                '--disable-web-security', '--disable-site-isolation-trials',
+                '--no-sandbox', '--disable-gpu', '--window-size=1920,1080', 
+                '--disable-blink-features=AutomationControlled',
+                '--enforce-webrtc-ip-permission-check',
+                '--force-webrtc-ip-handling-policy=disable-non-proxied-udp'
+            ],
+            ignoreDefaultArgs: ["--mute-audio", "--enable-automation"], 
+        });
 
-    for (let currentRun = 1; currentRun <= 3; currentRun++) {
-        console.log(`\n🌀 === [第 ${currentRun}/3 次盲盒抽卡开始] === 🌀`);
-        let context;
-        
-        try {
-            console.log("🔥 点火启动浏览器 (挂载动态家宽)...");
-            context = await chromium.launchPersistentContext('', {
-                headless: false, 
-                timeout: 120000, 
-                proxy: { server: 'socks5://127.0.0.1:10808' }, 
-                args: [
-                    '--headless=new', 
-                    `--disable-extensions-except=${busterPath}`,
-                    `--load-extension=${busterPath}`,
-                    '--disable-web-security', '--disable-site-isolation-trials',
-                    '--no-sandbox', '--disable-gpu', '--window-size=1920,1080', 
-                    '--disable-blink-features=AutomationControlled',
-                    '--enforce-webrtc-ip-permission-check',
-                    '--force-webrtc-ip-handling-policy=disable-non-proxied-udp'
-                ],
-                ignoreDefaultArgs: ["--mute-audio", "--enable-automation"], 
-            });
+        const targetPage = await context.newPage();
+        console.log("🌐 直达核心 Panel 面板 (等待家宽慢速加载)...");
+        await targetPage.goto('https://panel.gaming4free.net', { waitUntil: 'domcontentloaded', timeout: 90000 });
 
-            const ipPage = await context.newPage();
-            try {
-                await ipPage.goto('https://api.ipify.org', { timeout: 15000 });
-                console.log(`🌍 [盲盒鉴定] 本次分配到的全局出口 IP 为: ${await ipPage.innerText('body')}`);
-            } catch(e) {} finally { await ipPage.close(); }
+        const pwdInput = targetPage.locator('input[type="password"]').first();
+        const serverLabel = targetPage.getByText('My renqi', { exact: false }).first();
 
-            const targetPage = await context.newPage();
-            console.log("🌐 直达核心 Panel 面板 (等待家宽慢速加载)...");
-            await targetPage.goto('https://panel.gaming4free.net', { waitUntil: 'domcontentloaded', timeout: 90000 });
-
-            const pwdInput = targetPage.locator('input[type="password"]').first();
-            const serverLabel = targetPage.getByText('My renqi', { exact: false }).first();
-
-            let pageType = 'none';
-            for(let i=0; i<15; i++) {
-                if (await pwdInput.isVisible()) { pageType = 'login'; break; }
-                if (await serverLabel.isVisible()) { pageType = 'dashboard'; break; }
-                await targetPage.waitForTimeout(3000); 
-            }
-
-            if (pageType === 'none') {
-                console.log("🚨 未加载出有效页面。大概率抽到了断联的死节点。");
-                throw new Error("RETRY_NEEDED"); 
-            }
-
-            if (pageType === 'login') {
-                console.log(`🔑 发现登录框，填入账号...`);
-                await targetPage.locator('input:not([type="hidden"]):not([type="password"])').first().fill(MC_USERNAME);
-                await pwdInput.fill(MC_PASSWORD);
-                
-                // ==========================================
-                // 🌟 核心升级：见招拆招，动态重试点击登录
-                // ==========================================
-                let readyToSolve = false;
-                for (let clickRetry = 1; clickRetry <= 5; clickRetry++) {
-                    console.log(`🟢 [第 ${clickRetry} 次] 点击登录按钮...`);
-                    await targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).first().click({ force: true });
-                    
-                    await targetPage.waitForTimeout(2000);
-                    const errorToast = targetPage.getByText('did not render yet', { exact: false });
-                    
-                    if (await errorToast.isVisible({timeout: 1500}).catch(()=>false)) {
-                        console.log("⏳ [前端拦截] 网站报错说底层验证码还没加载完！耐心等 5 秒后再点...");
-                        await targetPage.waitForTimeout(5000);
-                    } else {
-                        console.log("✅ 登录动作被网站受理！盯防验证码...");
-                        readyToSolve = true;
-                        break;
-                    }
-                }
-
-                if (!readyToSolve) {
-                    console.log("❌ 连续 5 次点击都被前端卡死，可能网络完全断流了。");
-                    throw new Error("RETRY_NEEDED");
-                }
-                // ==========================================
-
-                let loginSuccess = false;
-                for (let i = 0; i < 20; i++) { 
-                    if (!targetPage.url().includes('auth/login')) {
-                        loginSuccess = true;
-                        console.log("🎉 验证通过！成功突破大门进入后台！");
-                        break;
-                    }
-                    const capStatus = await autoSolveCaptcha(targetPage);
-                    if (capStatus === 'blocked') {
-                        console.log("🚨 糟糕！抽到了脏 IP (Try again later)！");
-                        throw new Error("RETRY_NEEDED");
-                    }
-                    await targetPage.waitForTimeout(2000);
-                }
-                if (!loginSuccess) throw new Error("RETRY_NEEDED");
-            }
-
-            console.log("🖥️ 定位并点击 renqi 服务...");
-            await targetPage.getByText('My renqi', { exact: false }).filter({ state: 'visible' }).first().click({ force: true });
-            await targetPage.waitForLoadState('domcontentloaded');
+        let pageType = 'none';
+        for(let i=0; i<15; i++) {
+            if (await pwdInput.isVisible()) { pageType = 'login'; break; }
+            if (await serverLabel.isVisible()) { pageType = 'dashboard'; break; }
             await targetPage.waitForTimeout(3000); 
-            await targetPage.locator('a').filter({ hasText: /^Console$/i }).first().click({ force: true }); 
-            await targetPage.waitForLoadState('domcontentloaded');
-            await targetPage.waitForTimeout(3000);
-
-            console.log(`⏳ 准备点击 ADD 90 MINUTES 续期按钮...`);
-            try {
-                await targetPage.getByRole('button', { name: /ADD 90 MINUTES/i }).waitFor({ state: 'visible', timeout: 10000 });
-                await targetPage.getByRole('button', { name: /ADD 90 MINUTES/i }).click({ force: true });
-                console.log("✅ 成功点击！静音挂机看广告 (预留 150 秒)...");
-            } catch (e) {
-                if (await targetPage.getByRole('button', { name: /PLEASE WAIT/i }).isVisible({ timeout: 3000 })) {
-                    console.log("ℹ️ 续期冷却中，本次挂机结束。");
-                    return; 
-                }
-            }
-
-            for (let i = 1; i <= 30; i++) {
-                await targetPage.waitForTimeout(5000); 
-                if (i % 2 === 0) console.log(`  -> 广告播放中... 已等待 ${i * 5} 秒`);
-                
-                const capStatus = await autoSolveCaptcha(targetPage);
-                if (capStatus === 'blocked') {
-                    console.log("❌ 验证码环节遭遇脏 IP 拦截！准备转生...");
-                    throw new Error("RETRY_NEEDED");
-                }
-                try {
-                    if (await targetPage.getByRole('button', { name: /PLEASE WAIT/i }).isVisible({ timeout: 1000 })) {
-                        globalSuccess = true;
-                        break;
-                    }
-                } catch (e) {}
-            }
-
-            if (globalSuccess) {
-                console.log("🎉🎉 破阵成功！全流程完美收官！");
-                await targetPage.screenshot({ path: path.join(screenshotDir, `success_${Date.now()}.png`), fullPage: true }).catch(()=>{});
-                await sendTelegramMessage(`🎮 Gaming4Free 续期成功！\n账号: ${MC_USERNAME}\n状态: 已成功领取 90 分钟！`);
-                break; 
-            } else {
-                throw new Error("RETRY_NEEDED");
-            }
-
-        } catch (error) {
-            console.log(`💥 本次回合宣告失败。原因: ${error.message}`);
-            if (context) await context.close();
-            
-            if (currentRun < 3) {
-                console.log(`🔄 销毁当前浏览器，等待 30 秒让动态家宽自动切换新 IP...`);
-                await new Promise(resolve => setTimeout(resolve, 30000)); 
-            } else {
-                console.log("🩸 3 次盲盒全部抽中烂牌或卡死，撤退！等待下一个小时重新运行。");
-            }
-        } finally {
-            if (context) await context.close().catch(()=>{});
         }
+
+        if (pageType === 'none') {
+            console.log("🚨 未加载出有效页面。");
+            await targetPage.screenshot({ path: path.join(screenshotDir, `error_nologin_${Date.now()}.png`), fullPage: true }).catch(()=>{});
+            throw new Error("LOGIN_FAILED"); 
+        }
+
+        if (pageType === 'login') {
+            console.log(`🔑 发现登录框，填入账号...`);
+            await targetPage.locator('input:not([type="hidden"]):not([type="password"])').first().fill(MC_USERNAME);
+            await pwdInput.fill(MC_PASSWORD);
+            
+            let readyToSolve = false;
+            for (let clickRetry = 1; clickRetry <= 5; clickRetry++) {
+                console.log(`🟢 [第 ${clickRetry} 次] 点击登录按钮...`);
+                await targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).first().click({ force: true });
+                
+                await targetPage.waitForTimeout(2000);
+                const errorToast = targetPage.getByText('did not render yet', { exact: false });
+                
+                if (await errorToast.isVisible({timeout: 1500}).catch(()=>false)) {
+                    console.log("⏳ [前端拦截] 网站报错底层验证码未加载！等 5 秒后再点...");
+                    await targetPage.waitForTimeout(5000);
+                } else {
+                    console.log("✅ 登录动作被网站受理！盯防验证码...");
+                    readyToSolve = true;
+                    break;
+                }
+            }
+
+            if (!readyToSolve) throw new Error("LOGIN_FAILED");
+
+            let loginSuccess = false;
+            for (let i = 0; i < 20; i++) { 
+                if (!targetPage.url().includes('auth/login')) {
+                    loginSuccess = true;
+                    console.log("🎉 验证通过！成功突破大门进入后台！");
+                    break;
+                }
+                await autoSolveCaptcha(targetPage);
+                await targetPage.waitForTimeout(2000);
+            }
+            if (!loginSuccess) {
+                await targetPage.screenshot({ path: path.join(screenshotDir, `error_login_captcha_${Date.now()}.png`), fullPage: true }).catch(()=>{});
+                throw new Error("LOGIN_FAILED");
+            }
+        }
+
+        console.log("🖥️ 定位并点击 renqi 服务...");
+        await targetPage.getByText('My renqi', { exact: false }).filter({ state: 'visible' }).first().click({ force: true });
+        await targetPage.waitForLoadState('domcontentloaded');
+        await targetPage.waitForTimeout(3000); 
+        await targetPage.locator('a').filter({ hasText: /^Console$/i }).first().click({ force: true }); 
+        await targetPage.waitForLoadState('domcontentloaded');
+        await targetPage.waitForTimeout(3000);
+
+        console.log(`⏳ 准备点击 ADD 90 MINUTES 续期按钮...`);
+        try {
+            await targetPage.getByRole('button', { name: /ADD 90 MINUTES/i }).waitFor({ state: 'visible', timeout: 10000 });
+            await targetPage.getByRole('button', { name: /ADD 90 MINUTES/i }).click({ force: true });
+            console.log("✅ 成功点击！进入广告与验证码环节 (绝不盲目重试)...");
+        } catch (e) {
+            if (await targetPage.getByRole('button', { name: /PLEASE WAIT/i }).isVisible({ timeout: 3000 })) {
+                console.log("ℹ️ 续期冷却中，本次挂机正常结束。");
+                return; 
+            }
+        }
+
+        let globalSuccess = false;
+        let noBusterCount = 0; // 记录 Buster 消失的次数
+
+        for (let i = 1; i <= 30; i++) {
+            await targetPage.waitForTimeout(5000); 
+            if (i % 2 === 0) console.log(`  -> 等待环节进行中... 已度过 ${i * 5} 秒`);
+            
+            const capStatus = await autoSolveCaptcha(targetPage);
+            
+            if (capStatus === 'blocked') {
+                console.log("🚨 验证码环节遭遇拦截 (Try again later)！立刻拍照并终止任务！");
+                await targetPage.screenshot({ path: path.join(screenshotDir, `analysis_blocked_${Date.now()}.png`), fullPage: true }).catch(()=>{});
+                break;
+            } else if (capStatus === 'no_buster') {
+                noBusterCount++;
+                if (noBusterCount >= 2) {
+                    console.log("📸 连续 2 次成功切入语音，却找不到 Buster 小黄人！立刻拍照取证并终止任务！");
+                    await targetPage.screenshot({ path: path.join(screenshotDir, `analysis_no_buster_${Date.now()}.png`), fullPage: true }).catch(()=>{});
+                    break; 
+                }
+            }
+
+            try {
+                if (await targetPage.getByRole('button', { name: /PLEASE WAIT/i }).isVisible({ timeout: 1000 })) {
+                    globalSuccess = true;
+                    break;
+                }
+            } catch (e) {}
+        }
+
+        if (globalSuccess) {
+            console.log("🎉🎉 破阵成功！全流程完美收官！");
+            await targetPage.screenshot({ path: path.join(screenshotDir, `success_${Date.now()}.png`), fullPage: true }).catch(()=>{});
+            await sendTelegramMessage(`🎮 Gaming4Free 续期成功！\n账号: ${MC_USERNAME}\n状态: 已成功领取 90 分钟！`);
+        } else {
+            console.log("⚠️ 续期流程未能在 150 秒内成功完成，已保存现场截图待分析。");
+        }
+
+    } catch (error) {
+        console.log(`💥 流程提前终止: ${error.message}`);
+    } finally {
+        if (context) await context.close().catch(()=>{});
+        console.log("🛑 脚本进程已安全关闭。等待你的截图分析！");
     }
 })();
