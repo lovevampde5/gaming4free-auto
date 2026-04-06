@@ -36,7 +36,7 @@ async function sendTelegramMessage(text) {
     } catch (e) {}
 }
 
-// 🌟 核心升级：绝对视觉判定！无视谷歌幽灵框架
+// 🌟 核心升级：动态死盯模式，完美包容家宽延迟！
 async function autoSolveCaptcha(page) {
     try {
         const frames = page.frames();
@@ -47,11 +47,10 @@ async function autoSolveCaptcha(page) {
                 const solverBtn = frame.locator('#solver-button, .help-button-holder button').first();
                 const audioBtn = frame.locator('#recaptcha-audio-button').first();
 
-                // 🌟 只判断肉眼【真正可见】的按钮，彻底过滤幽灵框架
                 const isSolverVisible = await solverBtn.isVisible({timeout: 1000}).catch(()=>false);
                 const isAudioVisible = await audioBtn.isVisible({timeout: 1000}).catch(()=>false);
 
-                // 1. 如果 Buster 已经可见（可能已经被切到了语音模式），直接点！
+                // 1. 如果 Buster 已经可见，直接点！
                 if (isSolverVisible) {
                     console.log("  [透视雷达] 🤖 锁定真正可见的 Buster！执行物理点击...");
                     await solverBtn.click({ force: true });
@@ -59,28 +58,44 @@ async function autoSolveCaptcha(page) {
                     return 'solved';
                 }
 
-                // 2. 如果看到的是耳机，说明活框架正在等我们切语音
+                // 2. 看到耳机，点击切入语音，然后开启 15 秒死盯！
                 if (isAudioVisible) {
                     console.log("  [透视雷达] ⚠️ 锁定真正可见的耳机图标！点击切入语音...");
                     await audioBtn.click({ force: true });
                     
-                    // 等 3.5 秒让界面翻转，Buster 加载出来
-                    await page.waitForTimeout(3500); 
+                    console.log("  [透视雷达] 正在死盯 Buster 插件注入 (最高等待 15 秒)...");
+                    let busterAppeared = false;
+                    let isBlocked = false;
 
-                    // 检查是不是被谷歌拦截了
-                    if (await errorLocator.isVisible({timeout: 1000}).catch(()=>false)) {
-                        if ((await errorLocator.innerText()).includes('Try again later')) return 'blocked';
+                    // 🌟 开启 15 秒高频扫描循环
+                    for (let j = 0; j < 15; j++) {
+                        await page.waitForTimeout(1000);
+                        
+                        if (await errorLocator.isVisible({timeout: 500}).catch(()=>false)) {
+                            if ((await errorLocator.innerText()).includes('Try again later')) {
+                                isBlocked = true;
+                                break;
+                            }
+                        }
+
+                        if (await solverBtn.isVisible({timeout: 500}).catch(()=>false)) {
+                            busterAppeared = true;
+                            break;
+                        }
                     }
 
-                    // 重新检测 Buster 在翻转后是否可见
-                    const isSolverVisibleNow = await solverBtn.isVisible({timeout: 2000}).catch(()=>false);
-                    if (isSolverVisibleNow) {
-                        console.log("  [透视雷达] 🤖 语音模式就绪，可见 Buster，执行暴击...");
+                    if (isBlocked) {
+                        console.log("  [透视雷达] 🚨 致命错误：被谷歌拦截 (Try again later)！");
+                        return 'blocked';
+                    }
+
+                    if (busterAppeared) {
+                        console.log("  [透视雷达] 🤖 Buster 已现身！执行物理暴击...");
                         await solverBtn.click({ force: true });
                         await page.waitForTimeout(15000);
                         return 'solved';
                     } else {
-                        console.log("  [透视雷达] ❌ 异常：耳机已点击，但在当前活框架中依然未见 Buster。");
+                        console.log("  [透视雷达] ❌ 异常：等了整整 15 秒依然未见 Buster。");
                         return 'no_buster';
                     }
                 }
@@ -239,7 +254,7 @@ async function autoSolveCaptcha(page) {
                     break; 
                 }
             } else if (capStatus === 'solved') {
-                noBusterCount = 0; // 重置计数器，防止误判
+                noBusterCount = 0;
             }
 
             try {
