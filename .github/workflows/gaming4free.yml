@@ -1,4 +1,4 @@
-name: gaming4free renew (Resi IP + Radar)
+name: gaming4free renew (Sing-box + Resi IP)
 
 on:
   workflow_dispatch:
@@ -29,7 +29,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install deps & Xray
+      - name: Install deps & Audio setup
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb wget unzip curl jq p7zip-full pulseaudio alsa-utils ffmpeg
@@ -39,26 +39,29 @@ jobs:
           pactl load-module module-virtual-source source_name=virtual_mic || true
           pactl set-default-source virtual_mic || true
 
-      - name: Start Xray Proxy
+      - name: Start Sing-box Proxy
         env:
           XRAY_CONFIG: ${{ secrets.XRAY_CONFIG }}
         run: |
-          mkdir -p xray-core
-          wget -qO xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-          unzip -q xray.zip -d xray-core
-          echo "$XRAY_CONFIG" > xray-core/raw_config.json
+          # 动态获取并下载最新版 sing-box
+          LATEST_VERSION=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | jq -r .tag_name)
+          echo "Downloading sing-box $LATEST_VERSION..."
+          wget -qO sing-box.tar.gz "https://github.com/SagerNet/sing-box/releases/download/${LATEST_VERSION}/sing-box-${LATEST_VERSION#v}-linux-amd64.tar.gz"
+          tar -xzf sing-box.tar.gz
+          mv sing-box-*/sing-box .
+          chmod +x sing-box
           
-          # 强行注入 socks5 本地入口
-          jq '.inbounds = [{"listen": "127.0.0.1", "port": 10808, "protocol": "socks", "settings": {"auth": "noauth", "udp": true}}]' xray-core/raw_config.json > xray-core/config.json
+          # 写入我们刚刚配置的 sing-box JSON
+          echo "$XRAY_CONFIG" > config.json
           
-          # 后台启动代理
-          ./xray-core/xray run -c xray-core/config.json > xray.log 2>&1 &
-          echo "正在连接美国动态家宽节点..."
-          sleep 3
+          # 后台启动 sing-box
+          ./sing-box run -c config.json > proxy.log 2>&1 &
+          echo "正在使用 sing-box 强力连接美国动态家宽节点..."
+          sleep 4
           
           # 测试代理联通性
           PROXY_IP=$(curl -s -x socks5://127.0.0.1:10808 https://api.ipify.org || echo "代理连接失败")
-          echo "💥 伪装成功！当前家宽突破 IP 为: $PROXY_IP"
+          echo "💥 伪装成功！当前 sing-box 出口 IP 为: $PROXY_IP"
 
       - name: Install playwright
         run: |
