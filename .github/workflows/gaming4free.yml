@@ -1,4 +1,4 @@
-name: gaming4free renew (Sing-box + Resi IP)
+name: gaming4free renew (Python + Resi IP)
 
 on:
   workflow_dispatch:
@@ -17,22 +17,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout private repo
-        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          repository: ${{ github.repository_owner }}/gaming4free-auto
-          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
-          path: scripts
+          python-version: '3.10'
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install deps & Audio setup
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb wget unzip curl jq p7zip-full pulseaudio alsa-utils ffmpeg
+
+      - name: Setup Audio (Hardware spoofing)
+        run: |
           pulseaudio --start --exit-idle-time=-1 || true
           pactl load-module module-null-sink sink_name=virtual_speaker || true
           pactl set-default-sink virtual_speaker || true
@@ -43,7 +39,6 @@ jobs:
         env:
           XRAY_CONFIG: ${{ secrets.XRAY_CONFIG }}
         run: |
-          # 动态获取并下载最新版 sing-box
           LATEST_VERSION=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | jq -r .tag_name)
           echo "Downloading sing-box $LATEST_VERSION..."
           wget -qO sing-box.tar.gz "https://github.com/SagerNet/sing-box/releases/download/${LATEST_VERSION}/sing-box-${LATEST_VERSION#v}-linux-amd64.tar.gz"
@@ -51,28 +46,23 @@ jobs:
           mv sing-box-*/sing-box .
           chmod +x sing-box
           
-          # 写入我们刚刚配置的 sing-box JSON
           echo "$XRAY_CONFIG" > config.json
-          
-          # 后台启动 sing-box
           ./sing-box run -c config.json > proxy.log 2>&1 &
-          echo "正在使用 sing-box 强力连接美国动态家宽节点..."
+          echo "正在使用 sing-box 强力连接动态家宽节点..."
           sleep 4
           
-          # 测试代理联通性
           PROXY_IP=$(curl -s -x socks5://127.0.0.1:10808 https://api.ipify.org || echo "代理连接失败")
-          echo "💥 伪装成功！当前 sing-box 出口 IP 为: $PROXY_IP"
+          echo "💥 伪装成功！当前出口 IP 为: $PROXY_IP"
 
-      - name: Install playwright
+      - name: Install Python Packages
         run: |
-          npm init -y
-          npm install playwright playwright-extra puppeteer-extra-plugin-stealth
-          npx playwright install chromium --with-deps
+          pip install playwright pydub SpeechRecognition requests
+          playwright install chromium
 
-      - name: Run script
+      - name: Run Python Script
         run: |
           mkdir -p screenshots
-          xvfb-run -a node renew.js
+          xvfb-run -a python renew.py
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
