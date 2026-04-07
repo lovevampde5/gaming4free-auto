@@ -51,9 +51,15 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
         await page.goto('https://panel.gaming4free.net/auth/login', { waitUntil: 'networkidle', timeout: 30000 });
         await page.screenshot({ path: path.join(__dirname, `screenshots/1_open.png`) });
 
-        // 2. 填写账号密码 (适配图片中的 DOM)
-        await page.locator('input[type="email"]').fill(USERNAME);
-        await page.locator('input[type="password"]').fill(PASSWORD);
+        // 2. 填写账号密码 (使用更强大的兼容性定位器)
+        // 查找 name 属性为 username 或普通文本输入框
+        const userField = page.locator('input[name="username"], input[name="email"], input[type="text"]').first();
+        // 显式等待输入框出现，最多等 15 秒
+        await userField.waitFor({ state: 'visible', timeout: 15000 }); 
+        await userField.fill(USERNAME);
+
+        const passField = page.locator('input[name="password"], input[type="password"]').first();
+        await passField.fill(PASSWORD);
         console.log("✍️ 账号密码已填充");
 
         // 3. 点击登录按钮
