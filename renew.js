@@ -4,9 +4,9 @@ const path = require('path');
 // ==========================================
 // 💡 核心配置
 // ==========================================
-const RENEW_URL = 'https://game4free.net/woairenqi'; 
+const RENEW_URL = 'https://game4free.net/lovevamp'; 
 // 🌟 核心修复：强制写死服务器名称，不再读取环境变量，防止被邮箱覆盖
-const MC_USERNAME = 'My renqi'; 
+const MC_USERNAME = 'lovevampplus'; 
 
 const TG_TOKEN = process.env.TG_TOKEN || '';
 const TG_CHAT = process.env.TG_CHAT || '';
