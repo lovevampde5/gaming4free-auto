@@ -85,7 +85,7 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
 
         // 4. 点击 Renew 按钮
         console.log("🚀 准备提交续期请求...");
-        const renewBtn = page.getByRole('button', { name: 'Renew', exact: true });
+        const renewBtn = page.getByRole('button', { name: 'ADD 90 MINUTES', exact: true });
         
         await page.waitForTimeout(1000);
 
