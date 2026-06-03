@@ -4,8 +4,8 @@ from seleniumbase import SB
 # ==========================================
 # 💡 核心配置 (适配全新 g4f.gg 界面)
 # ==========================================
-TARGET_URL = "https://g4f.gg/renqi" 
-MC_USERNAME = "renqi"
+TARGET_URL = "https://g4f.gg/lovevamp" 
+MC_USERNAME = "lovevamp"
 
 TG_TOKEN = os.getenv("TG_TOKEN", "")
 TG_CHAT = os.getenv("TG_CHAT_ID", "")
