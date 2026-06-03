@@ -2,7 +2,7 @@ import os, sys, time, urllib.request, json
 from seleniumbase import SB
 
 # ==========================================
-# 💡 核心配置 (G4F.GG 终极物理外挂版)
+# 💡 核心配置 (G4F.GG 终极物理雷达制导版)
 # ==========================================
 TARGET_URL = "https://g4f.gg/renqi" 
 MC_USERNAME = "renqi"
@@ -20,11 +20,10 @@ def send_tg(msg):
         except:
             pass
 
-print(f"\n===== 🚀 开始执行极速续期 (终极物理盲狙版) =====")
+print(f"\n===== 🚀 开始执行极速续期 (终极雷达制导狙击版) =====")
 
 proxy_str = "socks5://127.0.0.1:40000"
 
-# 🌟 核心修复：直接在启动时强行锁死 1920x1080 分辨率，绝对不调用会导致崩溃的 maximize_window！
 with SB(uc=True, proxy=proxy_str, headless=False, window_size="1920,1080") as sb:
     try:
         print("⏳ 正在为虚拟显示器安装 xdotool 物理鼠标引擎...")
@@ -64,26 +63,45 @@ with SB(uc=True, proxy=proxy_str, headless=False, window_size="1920,1080") as sb
         if not is_clicked:
             sb.click('xpath=//*[contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "add 90")]')
 
-        print("⏳ 盲等 6 秒钟，等待 CF 盾在屏幕正中央展开...")
-        print("⚠️ [系统警告] 已切断所有 WebDriver 探针，开启静默隐身模式！")
+        print("⏳ 盲等 6 秒钟，等待 CF 盾在屏幕上展开...")
         time.sleep(6) 
         
-        print("🛡️ 启动【全盲物理狙击】模块，准备跨维度开火！")
+        print("🛡️ 启动【动态雷达追踪】模块，锁定靶心！")
         
-        # 🌟 既然分辨率锁死了 1920x1080，直接计算物理坐标，免去复杂的探测！
-        w, h = 1920, 1080
-        target_x = (w // 2) - 80   # 弹窗居中，复选框偏左
-        target_y = (h // 2) + 30   # 抵消浏览器顶部导航栏的偏移
+        # 🌟 核心杀手锏：注入 JS 探针，计算 CF 盾在屏幕上的绝对物理像素坐标！
+        # 这个操作只读取整数坐标，不会触发 CF 的“框架入侵”警报。
+        js_radar = """
+        let cf = document.querySelector('iframe[src*="cloudflare"], iframe[src*="turnstile"], iframe[title*="Cloudflare"]');
+        if (!cf) return null;
+        let rect = cf.getBoundingClientRect();
         
-        print(f"🎯 锁定屏幕绝对坐标: ({target_x}, {target_y})")
-        print("🖱️ 物理鼠标按下扳机！")
+        // 计算浏览器顶部 UI (地址栏、标签页) 的高度
+        let ui_y = window.outerHeight - window.innerHeight;
+        // 如果获取失败，使用 Chrome 标准头部高度作为保底
+        if (ui_y <= 0 || ui_y > 150) ui_y = 85; 
         
-        # 调用原生 Linux xdotool 发送真正的硬件级鼠标点击
-        os.system(f"xdotool mousemove {target_x} {target_y} click 1")
+        // 计算物理坐标：复选框大概位于 iframe 左侧往右 30 像素处，垂直居中。
+        let target_x = window.screenX + rect.left + 30;
+        let target_y = window.screenY + ui_y + rect.top + (rect.height / 2);
         
-        print("⏳ 射击完毕！静默等待 8 秒，让子弹飞一会儿 (等待盾转圈通过)...")
-        time.sleep(8)
+        return Math.round(target_x) + "," + Math.round(target_y);
+        """
         
+        coords = sb.execute_script(js_radar)
+        
+        if coords:
+            target_x, target_y = coords.split(",")
+            print(f"🎯 雷达精确锁定 CF 盾绝对靶心: ({target_x}, {target_y})")
+            print("🖱️ 物理鼠标按下扳机！")
+            
+            # 使用算出的绝对坐标，让物理鼠标去点！
+            os.system(f"xdotool mousemove {target_x} {target_y} click 1")
+            
+            print("⏳ 射击完毕！静默等待 8 秒，让子弹飞一会儿 (等待盾转圈通过)...")
+            time.sleep(8)
+        else:
+            print("⏩ 雷达未扫描到 CF 盾，可能已自动放行。")
+            
         try:
             sb.save_screenshot("screenshots/2_result.png")
             print("📸 最终战况截图已保存。")
@@ -91,7 +109,7 @@ with SB(uc=True, proxy=proxy_str, headless=False, window_size="1920,1080") as sb
             print("⚠️ 截图保存失败。")
 
         print("✅ 流程执行完毕！")
-        send_tg(f"✅ 服务器 [{MC_USERNAME}] 续期脚本运行完毕！\n【破盾方式: 物理盲狙】请查阅 GitHub 最新截图确认 CF 盾是否通过。")
+        send_tg(f"✅ 服务器 [{MC_USERNAME}] 续期脚本运行完毕！\n【破盾方式: 动态雷达制导物理盲狙】请查阅 GitHub 截图确认战果。")
 
     except Exception as e:
         print(f"❌ 发生致命错误: {e}")
